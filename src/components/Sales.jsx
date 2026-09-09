@@ -1051,57 +1051,60 @@ export default function Sales() {
                                     </div>
                                 </div>
 
-                                {/* نوع الحساب والاشتراك: شخصي أم مشترك */}
+                                 {/* نوع الحساب والاشتراك: شخصي أم مشترك */}
                                 <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
                                             <i className="fa-solid fa-users-gear text-indigo-500"></i>
-                                            نوع الحساب (شخصي أم مشترك)
+                                            نوع الاشتراك
                                         </div>
                                         <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full ${
                                             salePlanType === 'personal'
                                                 ? 'bg-emerald-100 text-emerald-800'
                                                 : salePlanType === 'shared_one_device'
                                                 ? 'bg-purple-100 text-purple-800'
-                                                : salePlanType === 'shared_two_devices'
-                                                ? 'bg-blue-100 text-blue-800'
                                                 : 'bg-cyan-100 text-cyan-800'
                                         }`}>
-                                            {salePlanType === 'personal' ? 'شخصي (حساب كامل)' : salePlanType === 'shared_one_device' ? 'مشترك (جهاز واحد)' : salePlanType === 'shared_two_devices' ? 'مشترك (جهازين)' : 'Workspace'}
+                                            {salePlanType === 'personal' ? '🟢 شخصي — يخصم الجهازين' : salePlanType === 'shared_one_device' ? '🟣 مشترك — يخصم جهاز واحد' : 'Workspace'}
                                         </span>
                                     </div>
 
                                     {(() => {
                                         const sheetAcc = selectedSheetAccountId ? sheetAccounts.find(item => String(item.id) === String(selectedSheetAccountId)) : null;
-                                        const isSingleOnly = sheetAcc ? (Number(sheetAcc.currentUses || 0) > 0 || Number(sheetAcc.maxUses || 2) < 2) : false;
+                                        const currentUses = Math.max(0, Number(sheetAcc?.currentUses || 0));
+                                        const maxUses = Math.max(1, Number(sheetAcc?.maxUses || 2));
+                                        const remainingSlots = maxUses - currentUses;
+                                        // شخصي يحتاج 2 slots متاحة — لو فيه 1 فقط، شخصي مش متاح
+                                        const personalDisabled = sheetAcc ? remainingSlots < 2 : false;
                                         return (
                                             <div className="space-y-3">
-                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                                    {/* شخصي */}
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {/* شخصي — يخصم الجهازين (2 slots) */}
                                                     <button
                                                         type="button"
-                                                        disabled={isSingleOnly}
+                                                        disabled={personalDisabled}
                                                         onClick={() => {
                                                             setSalePlanType('personal');
                                                             setAccountUsageMode('personal');
                                                             setSaleType('personal');
                                                         }}
-                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
-                                                            isSingleOnly
+                                                        className={`p-5 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2.5 relative cursor-pointer ${
+                                                            personalDisabled
                                                                 ? 'opacity-40 cursor-not-allowed border-slate-200 bg-slate-50'
                                                                 : salePlanType === 'personal'
                                                                 ? 'border-emerald-500 bg-emerald-50/70 shadow-md ring-2 ring-emerald-200'
-                                                                : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
+                                                                : 'border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/30'
                                                         }`}
                                                     >
-                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${
                                                             salePlanType === 'personal' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
                                                         }`}>
                                                             <i className="fa-solid fa-user-shield"></i>
                                                         </div>
                                                         <div>
                                                             <span className="text-sm font-black text-slate-800 block">شخصي</span>
-                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">حساب كامل للعميل</span>
+                                                            <span className="text-[11px] text-slate-500 font-semibold block mt-0.5">الجهازين للعميل</span>
+                                                            <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded mt-1 inline-block">يخصم 2 slots</span>
                                                         </div>
                                                         {salePlanType === 'personal' && (
                                                             <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px]">
@@ -1110,7 +1113,7 @@ export default function Sales() {
                                                         )}
                                                     </button>
 
-                                                    {/* مشترك - جهاز واحد */}
+                                                    {/* مشترك — يخصم جهاز واحد (1 slot) */}
                                                     <button
                                                         type="button"
                                                         onClick={() => {
@@ -1118,20 +1121,21 @@ export default function Sales() {
                                                             setAccountUsageMode('shared_one_device');
                                                             setSaleType('personal');
                                                         }}
-                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
+                                                        className={`p-5 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2.5 relative cursor-pointer ${
                                                             salePlanType === 'shared_one_device'
                                                                 ? 'border-purple-500 bg-purple-50/70 shadow-md ring-2 ring-purple-200'
-                                                                : 'border-slate-200 hover:border-purple-300 hover:bg-slate-50'
+                                                                : 'border-slate-200 hover:border-purple-300 hover:bg-purple-50/30'
                                                         }`}
                                                     >
-                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl ${
                                                             salePlanType === 'shared_one_device' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-500'
                                                         }`}>
                                                             <i className="fa-solid fa-laptop"></i>
                                                         </div>
                                                         <div>
-                                                            <span className="text-sm font-black text-slate-800 block">مشترك (جهاز واحد)</span>
-                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">تسجيل خروج جهاز واحد</span>
+                                                            <span className="text-sm font-black text-slate-800 block">مشترك</span>
+                                                            <span className="text-[11px] text-slate-500 font-semibold block mt-0.5">جهاز واحد للعميل</span>
+                                                            <span className="text-[10px] font-black text-purple-600 bg-purple-50 border border-purple-200 px-1.5 py-0.5 rounded mt-1 inline-block">يخصم 1 slot</span>
                                                         </div>
                                                         {salePlanType === 'shared_one_device' && (
                                                             <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px]">
@@ -1139,45 +1143,12 @@ export default function Sales() {
                                                             </span>
                                                         )}
                                                     </button>
-
-                                                    {/* مشترك - جهازين */}
-                                                    <button
-                                                        type="button"
-                                                        disabled={isSingleOnly}
-                                                        onClick={() => {
-                                                            setSalePlanType('shared_two_devices');
-                                                            setAccountUsageMode('shared_two_devices');
-                                                            setSaleType('personal');
-                                                        }}
-                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
-                                                            isSingleOnly
-                                                                ? 'opacity-40 cursor-not-allowed border-slate-200 bg-slate-50'
-                                                                : salePlanType === 'shared_two_devices'
-                                                                ? 'border-blue-500 bg-blue-50/70 shadow-md ring-2 ring-blue-200'
-                                                                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
-                                                        }`}
-                                                    >
-                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
-                                                            salePlanType === 'shared_two_devices' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
-                                                        }`}>
-                                                            <i className="fa-solid fa-network-wired"></i>
-                                                        </div>
-                                                        <div>
-                                                            <span className="text-sm font-black text-slate-800 block">مشترك (جهازين)</span>
-                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">تسجيل خروج الجهازين</span>
-                                                        </div>
-                                                        {salePlanType === 'shared_two_devices' && (
-                                                            <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px]">
-                                                                <i className="fa-solid fa-check"></i>
-                                                            </span>
-                                                        )}
-                                                    </button>
                                                 </div>
 
-                                                {isSingleOnly && (
+                                                {personalDisabled && (
                                                     <div className="bg-amber-50 text-amber-800 p-2.5 rounded-xl border border-amber-200 text-xs font-bold flex items-center gap-2">
                                                         <i className="fa-solid fa-circle-info text-amber-500"></i>
-                                                        الحساب المختار في بيانات الحساب به جهاز مستخدم بالفعل، لذلك متاح لجهاز واحد فقط.
+                                                        الحساب المختار به جهاز مستخدم بالفعل — متاح للمشترك (جهاز واحد) فقط.
                                                     </div>
                                                 )}
 
