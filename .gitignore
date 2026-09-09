@@ -1,0 +1,45 @@
+# dependencies
+node_modules/
+/.pnp
+.pnp.js
+
+# build output
+dist/
+build/
+
+# environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+
+# debug logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# misc
+stats.html
+*.sql
+!supabase_schema.sql
+*.php
+*.bak
+*.old
+*.dump
+coverage/
+*.zip
+*.mjs
+vite.config.js.timestamp*
+
+# lock files (optional — remove this line if you want to commit package-lock.json)
+# package-lock.json

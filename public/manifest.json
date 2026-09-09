@@ -1,0 +1,15 @@
+{
+  "short_name": "Service Hub",
+  "name": "Service Hub — إدارة اشتراكات العملاء",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#4f46e5",
+  "background_color": "#f8fafc"
+}
