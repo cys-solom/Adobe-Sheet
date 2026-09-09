@@ -65,7 +65,7 @@ export async function sellCloudAccount(record, accountId) {
     // 3. If accountId provided, update account usage in account_data
     let updatedAccountRecords = accountRecords;
     if (accountId) {
-        const isTwoDevices = record.deviceType === 'جهازين' || record.accountUsageMode === 'personal';
+        const isTwoDevices = record.deviceType === 'جهازين' || record.deviceType === 'شخصي' || record.accountUsageMode === 'personal';
         const delta = isTwoDevices ? 2 : 1;
 
         updatedAccountRecords = accountRecords.map(acc => {

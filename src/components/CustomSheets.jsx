@@ -51,10 +51,12 @@ const CalendarOptionIcon = ({ num = null, isSelected = false }) => {
 };
 
 const DURATION_ITEMS = [
-    { label: '1 شهر', value: '1 شهر', num: 1 },
-    { label: '2 شهر', value: '2 شهر', num: 2 },
-    { label: '3 شهور', value: '3 شهور', num: 3 },
-    { label: '4 شهور', value: '4 شهور', num: 4 },
+    { label: '1 شهر (30 يوم)', value: '1 شهر', num: 1 },
+    { label: '2 شهر (60 يوم)', value: '2 شهر', num: 2 },
+    { label: '3 شهور (90 يوم)', value: '3 شهور', num: 3 },
+    { label: '4 شهور (120 يوم)', value: '4 شهور', num: 4 },
+    { label: '6 شهور (180 يوم)', value: '6 شهور', num: 6 },
+    { label: '1 سنة (365 يوم)', value: '1 سنة', num: 12 },
 ];
 
 /**
@@ -430,7 +432,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     const handleSetDeviceType = (deviceType) => {
         setFormData(prev => {
-            if (deviceType !== 'جهازين' || !prev.selectedAccount) {
+            const isFull = deviceType === 'جهازين' || deviceType === 'شخصي';
+            if (!isFull || !prev.selectedAccount) {
                 return { ...prev, deviceType };
             }
 
@@ -2543,17 +2546,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             );
                                                         })()}
                                                     </td>
-                                                    {/* Device Type (نوع الاشتراك: جهاز ولا جهازين) */}
+                                                    {/* Device Type (نوع الاشتراك: شخصي أم مشترك) */}
                                                     <td className="px-1.5 py-1 font-medium">
-                                                        {rec.deviceType === 'جهازين' ? (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/60 shadow-xs whitespace-nowrap">
-                                                                <i className="fa-solid fa-laptop text-[8px]"></i>
-                                                                <span>جهازين</span>
+                                                        {rec.deviceType === 'شخصي' ? (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs whitespace-nowrap">
+                                                                <i className="fa-solid fa-user-shield text-[8px]"></i>
+                                                                <span>شخصي</span>
+                                                            </span>
+                                                        ) : rec.deviceType === 'جهازين' ? (
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60 shadow-xs whitespace-nowrap">
+                                                                <i className="fa-solid fa-network-wired text-[8px]"></i>
+                                                                <span>مشترك (جهازين)</span>
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60 shadow-xs whitespace-nowrap">
-                                                                <i className="fa-solid fa-mobile-screen text-[8px]"></i>
-                                                                <span>جهاز</span>
+                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/60 shadow-xs whitespace-nowrap">
+                                                                <i className="fa-solid fa-laptop text-[8px]"></i>
+                                                                <span>مشترك (جهاز)</span>
                                                             </span>
                                                         )}
                                                     </td>
@@ -3319,36 +3327,61 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </div>
                                 </div>
 
-                                {/* نوع الاشتراك: جهاز ولا جهازين */}
+                                {/* نوع الاشتراك: شخصي أم مشترك */}
                                 <div className="space-y-1.5 pt-1">
                                     <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                        نوع الاشتراك
+                                        نوع الاشتراك (شخصي أم مشترك)
                                     </label>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                        {/* شخصي */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('جهاز')}
-                                            className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'جهاز' || !formData.deviceType
-                                                    ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm ring-2 ring-blue-500/20'
+                                            onClick={() => handleSetDeviceType('شخصي')}
+                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
+                                                formData.deviceType === 'شخصي'
+                                                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
-                                            <i className="fa-solid fa-mobile-screen text-base text-blue-500"></i>
-                                            <span className="text-sm">جهاز</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-user-shield text-sm text-emerald-500"></i>
+                                                <span className="text-xs font-black">شخصي</span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400 font-normal">حساب كامل</span>
                                         </button>
 
+                                        {/* مشترك - جهاز واحد */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('جهازين')}
-                                            className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'جهازين'
+                                            onClick={() => handleSetDeviceType('جهاز')}
+                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
+                                                formData.deviceType === 'جهاز' || (!formData.deviceType)
                                                     ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-sm ring-2 ring-purple-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
-                                            <i className="fa-solid fa-laptop text-base text-purple-500"></i>
-                                            <span className="text-sm">جهازين</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-laptop text-sm text-purple-500"></i>
+                                                <span className="text-xs font-black">مشترك (جهاز واحد)</span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400 font-normal">جهاز واحد</span>
+                                        </button>
+
+                                        {/* مشترك - جهازين */}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleSetDeviceType('جهازين')}
+                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
+                                                formData.deviceType === 'جهازين'
+                                                    ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm ring-2 ring-blue-500/20'
+                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-1.5">
+                                                <i className="fa-solid fa-network-wired text-sm text-blue-500"></i>
+                                                <span className="text-xs font-black">مشترك (جهازين)</span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400 font-normal">الجهازين معاً</span>
                                         </button>
                                     </div>
                                 </div>
