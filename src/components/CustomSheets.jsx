@@ -261,7 +261,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         password2: '',
         duration: '',
         startDate: '',
-        deviceType: '',
+        deviceType: 'مشترك',
         paymentStatus: 'مدفوع',
         selectedAccount: '',
         invoiceNumber: '',
@@ -430,25 +430,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         }));
     };
 
-    const handleSetDeviceType = (deviceType) => {
+    const handleSetDeviceType = (type) => {
+        const nextType = type === 'شخصي' ? 'شخصي' : 'مشترك';
         setFormData(prev => {
-            const isFull = deviceType === 'شخصي' || deviceType === 'جهازين';
-            if (!isFull || !prev.selectedAccount) {
-                return { ...prev, deviceType };
+            if (nextType === 'شخصي' && prev.selectedAccount) {
+                const account = availableAccounts.find(acc => {
+                    const selectedValue = String(prev.selectedAccount || '').toLowerCase();
+                    return String(acc.email || '').toLowerCase() === selectedValue
+                        || String(acc.selectedAccount || '').toLowerCase() === selectedValue;
+                });
+                const maxUses = Math.max(1, Number(account?.maxUses || 2));
+                const currentUses = Math.max(0, Number(account?.currentUses || 0));
+                if (account && (currentUses > 0 || maxUses < 2)) {
+                    showToast('تم إلغاء اختيار الحساب لأن الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (جهازين)', 'warning');
+                    return { ...prev, deviceType: 'شخصي', selectedAccount: '' };
+                }
             }
-
-            const account = availableAccounts.find(acc => {
-                const selectedValue = String(prev.selectedAccount || '').toLowerCase();
-                return String(acc.email || '').toLowerCase() === selectedValue
-                    || String(acc.selectedAccount || '').toLowerCase() === selectedValue;
-            });
-            const maxUses = Math.max(1, Number(account?.maxUses || 2));
-            const currentUses = Math.max(0, Number(account?.currentUses || 0));
-            if (account && (currentUses > 0 || maxUses < 2)) {
-                showToast('تم إلغاء اختيار الحساب لأن الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (جهازين)', 'warning');
-                return { ...prev, deviceType, selectedAccount: '' };
-            }
-            return { ...prev, deviceType };
+            return { ...prev, deviceType: nextType };
         });
     };
 
@@ -528,10 +526,6 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             }
             if (!formData.duration) {
                 showToast('يرجى اختيار مدة الاشتراك', 'warning');
-                return;
-            }
-            if (!formData.deviceType) {
-                showToast('يرجى اختيار نوع الاشتراك (شخصي أم مشترك)', 'warning');
                 return;
             }
             const selected = findSelectedAvailableAccount();
@@ -672,7 +666,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             password2: '',
             duration: '',
             startDate: '',
-            deviceType: '',
+            deviceType: 'مشترك',
             paymentStatus: 'مدفوع',
             selectedAccount: '',
             invoiceNumber: '',
@@ -701,7 +695,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             password2: rec.password2 || '',
             duration: rec.duration || '',
             startDate: rec.startDate || rec.date || '',
-            deviceType: rec.deviceType || 'جهاز',
+            deviceType: (rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين') ? 'شخصي' : 'مشترك',
             paymentStatus: rec.paymentStatus || 'مدفوع',
             selectedAccount: rec.selectedAccount || '',
             invoiceNumber: rec.invoiceNumber || '',
@@ -1723,7 +1717,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             password2: '',
                                             duration: '',
                                             startDate: new Date().toISOString().slice(0, 10),
-                                            deviceType: '',
+                                            deviceType: 'مشترك',
                                             paymentStatus: 'مدفوع',
                                             selectedAccount: '',
                                             invoiceNumber: '',
@@ -3189,7 +3183,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <input
                                                 type="text"
                                                 value={formData.email}
-                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
                                                 placeholder="example@domain.com"
                                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                             />
@@ -3207,7 +3201,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 <input
                                                     type="text"
                                                     value={formData.password}
-                                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
                                                     placeholder={currentSheetId === 'account_data' ? 'Outlook password' : 'كلمة المرور الرئيسية'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
@@ -3223,7 +3217,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 <input
                                                     type="text"
                                                     value={formData.password2}
-                                                    onChange={(e) => setFormData({ ...formData, password2: e.target.value })}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, password2: e.target.value }))}
                                                     placeholder={currentSheetId === 'account_data' ? 'Adobe password' : 'كلمة مرور بديلة / كود إضافي'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
@@ -3283,7 +3277,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     <button
                                                         type="button"
                                                         onClick={() => {
-                                                            setFormData({ ...formData, duration: '' });
+                                                            setFormData(prev => ({ ...prev, duration: '' }));
                                                             setIsDurationDropdownOpen(false);
                                                         }}
                                                         className={`w-full px-4 py-3 flex items-center justify-end gap-2.5 transition text-xs font-bold ${
@@ -3304,7 +3298,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 key={item.value}
                                                                 type="button"
                                                                 onClick={() => {
-                                                                    setFormData({ ...formData, duration: item.value });
+                                                                    setFormData(prev => ({ ...prev, duration: item.value }));
                                                                     setIsDurationDropdownOpen(false);
                                                                 }}
                                                                 className={`w-full px-4 py-3 flex items-center justify-end gap-3 transition text-xs font-bold ${
@@ -3331,7 +3325,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             </label>
                                             <button
                                                 type="button"
-                                                onClick={() => setFormData({ ...formData, startDate: new Date().toISOString().slice(0, 10) })}
+                                                onClick={() => setFormData(prev => ({ ...prev, startDate: new Date().toISOString().slice(0, 10) }))}
                                                 className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold"
                                                 title="تعيين لتاريخ اليوم"
                                             >
@@ -3343,7 +3337,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <input
                                                 type="date"
                                                 value={formData.startDate}
-                                                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                                                onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
                                                 className="w-full bg-white dark:bg-slate-850 border-2 border-slate-200 dark:border-slate-700 hover:border-blue-400 focus:border-blue-500 rounded-2xl px-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition cursor-pointer"
                                             />
                                         </div>
@@ -3356,12 +3350,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
                                             نوع الاشتراك (شخصي أم مشترك)
                                         </label>
-                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                                            formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين'
-                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                                : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                        <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
+                                            (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 ring-1 ring-emerald-500/30'
+                                                : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30'
                                         }`}>
-                                            {formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين' ? '🟢 شخصي — يخصم الجهازين' : '🟣 مشترك — يخصم جهاز واحد'}
+                                            {(formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين') ? '🟢 شخصي — يخصم الجهازين' : '🟣 مشترك — يخصم جهاز واحد'}
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2.5">
@@ -3370,7 +3364,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             type="button"
                                             onClick={() => handleSetDeviceType('شخصي')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين'
+                                                (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
@@ -3387,7 +3381,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             type="button"
                                             onClick={() => handleSetDeviceType('مشترك')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'مشترك' || formData.deviceType === 'جهاز' || (!formData.deviceType)
+                                                (formData.deviceType !== 'شخصي' && formData.deviceType !== 'جهازين')
                                                     ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-sm ring-2 ring-purple-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
@@ -3409,7 +3403,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             type="button"
-                                            onClick={() => setFormData({ ...formData, paymentStatus: 'مدفوع' })}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'مدفوع' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
                                                 formData.paymentStatus === 'مدفوع' || !formData.paymentStatus
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
@@ -3422,7 +3416,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         <button
                                             type="button"
-                                            onClick={() => setFormData({ ...formData, paymentStatus: 'غير مدفوع' })}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'غير مدفوع' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
                                                 formData.paymentStatus === 'غير مدفوع'
                                                     ? 'border-rose-500 bg-rose-500/10 text-rose-600 dark:text-rose-400 shadow-sm ring-2 ring-rose-500/20'
