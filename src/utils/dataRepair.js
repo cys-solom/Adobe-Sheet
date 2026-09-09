@@ -4,6 +4,7 @@ export const DEFAULT_SHEETS = [
     { id: 'client_data', name: 'بيانات العميل', icon: 'fa-user-tie', color: 'from-blue-600 to-indigo-600', badgeColor: 'bg-blue-500' },
     { id: 'merchant_data', name: 'بيانات التاجر', icon: 'fa-store', color: 'from-emerald-600 to-teal-600', badgeColor: 'bg-emerald-500' },
     { id: 'account_data', name: 'بيانات الحساب', icon: 'fa-shield-halved', color: 'from-purple-600 to-indigo-600', badgeColor: 'bg-purple-500' },
+    { id: 'reminders_data', name: 'تذكيرات عامة', icon: 'fa-bell', color: 'from-amber-500 to-orange-500', badgeColor: 'bg-amber-500' },
     { id: 'trash_data', name: 'سلة المهملات', icon: 'fa-trash-can', color: 'from-rose-600 to-red-600', badgeColor: 'bg-rose-500' }
 ];
 
@@ -59,8 +60,8 @@ export const sanitizeRecord = (r, idx = 0) => {
             finalAccountCreatedDate = String(r.created_at).slice(0, 10);
         }
     }
-    if (!finalReminderDays && (r.id?.startsWith('REC-ACC-') || finalAccountCreatedDate)) {
-        finalReminderDays = '30';
+    if (!finalReminderDays) {
+        finalReminderDays = '20';
     }
 
     const normalizedAccountUsageStatus = (() => {
@@ -80,11 +81,16 @@ export const sanitizeRecord = (r, idx = 0) => {
         rawNotes = rawNotes ? `${rawNotes} | ${extras.join(' - ')}` : extras.join(' - ');
     }
 
+    const cleanPassword2 = String(rawPassword2 || '').trim();
+    const finalPassword2 = (!cleanPassword2 || cleanPassword2 === 'Will be added later' || cleanPassword2 === 'سيتم إضافته لاحقاً')
+        ? 'Service2030@'
+        : cleanPassword2;
+
     return {
         id: String(r.id || `REC-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`),
         email: String(rawEmail).trim(),
         password: String(rawPassword).trim(),
-        password2: String(rawPassword2).trim(),
+        password2: finalPassword2,
         duration: String(rawDuration).trim(),
         startDate: String(rawStartDate).trim(),
         deviceType: String(rawDeviceType).trim(),

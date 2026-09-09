@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
@@ -229,6 +229,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [expiryFilter, setExpiryFilter] = useState('all'); // 'all', 'near', 'expired', 'active'
     const [offerReminderFilter, setOfferReminderFilter] = useState('all'); // account_data only: all, pending, near3, today, overdue
     const [isAlertsExpanded, setIsAlertsExpanded] = useState(true);
+    const [paymentFilter, setPaymentFilter] = useState('all'); // advanced: all, paid, unpaid
+    const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, جهاز, جهازين
+    const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -264,7 +267,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         visaAccount: '',
         notes: '',
         accountCreatedDate: '',
-        reminderDays: '',
+        reminderDays: '20',
         offerActivated: false,
         offerActivatedAt: ''
     });
@@ -468,19 +471,32 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     const handleCopyAdobeAccess = (rec) => {
-        if (!rec?.email || !rec?.password2) {
-            showToast('يجب وجود الإيميل و Adobe Password للنسخ', 'warning');
+        if (!rec?.email) {
+            showToast('يجب وجود الإيميل للنسخ', 'warning');
             return;
         }
 
+        const adobePassword = (rec.password2 && rec.password2.trim() && rec.password2 !== 'Will be added later')
+            ? rec.password2.trim()
+            : 'Service2030@';
+
         const message = [
-            `Adobe Email: ${rec.email}`,
-            `Adobe Password: ${rec.password2}`,
+            '┌──────────────────────────┐',
+            '│          🎨 Adobe Creative Cloud  ',
+            '└──────────────────────────┘',
             '',
-            'ملحوظه ‼️',
-            'ممنوع تغيير أي بيانات او باسورد في حساب Adobe أو تعديل أي إعدادات خاصة بالحساب.',
+            `📧 Adobe Mail : ${rec.email}`,
+            `🔑 Adobe Password : ${adobePassword}`,
             '',
-            'في حالة تغيير أي بيانات، الحساب هيفقد الضمان والاشتراك.'
+            '━━━━━━━━━',
+            '⚠️ ملحوظه هامة جداً ‼️',
+            '',
+            '🚫 ممنوع تغيير أي بيانات أو',
+            '   باسورد في حساب Adobe أو',
+            '   تعديل أي إعدادات خاصة بالحساب.',
+            '',
+            ' في حالة تغيير أي بيانات،',
+            '   الحساب هيفقد الضمان والاشتراك.',
         ].join('\n');
 
         handleCopy(message, `adobe_access_${rec.id}`);
@@ -524,6 +540,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 showToast('يرجى إدخال البريد الإلكتروني أو كلمة المرور على الأقل', 'warning');
                 return;
             }
+        } else if (currentSheetId === 'reminders_data') {
+            if (!formData.email && !formData.notes) {
+                showToast('يرجى كتابة عنوان أو تفاصيل التذكير', 'warning');
+                return;
+            }
         } else {
             if (!formData.email && !formData.invoiceNumber && !formData.visa && !formData.selectedAccount) {
                 showToast('يرجى إدخال البريد الإلكتروني أو رقم الفاتورة أو بيانات الحساب على الأقل', 'warning');
@@ -534,7 +555,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const cleanPayload = isClientOrMerchant ? {
             email: formData.email,
             password: formData.password,
-            password2: formData.password2,
+            password2: formData.password2 || 'Service2030@',
             duration: formData.duration,
             startDate: formData.startDate || '',
             deviceType: formData.deviceType || 'جهاز',
@@ -549,7 +570,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         } : currentSheetId === 'account_data' ? {
             email: formData.email,
             password: formData.password,
-            password2: formData.password2,
+            password2: formData.password2 || 'Service2030@',
             invoiceNumber: formData.invoiceNumber || '',
             visa: formData.visa || '',
             visaAccount: formData.visaAccount || '',
@@ -560,16 +581,36 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             selectedAccount: '',
             notes: formData.notes,
             accountCreatedDate: formData.accountCreatedDate || new Date().toISOString().slice(0, 10),
-            reminderDays: formData.reminderDays || '',
+            reminderDays: formData.reminderDays || '20',
             currentUses: editingRecord?.currentUses || 0,
             maxUses: editingRecord?.maxUses || 2,
             accountUsageStatus: editingRecord?.accountUsageStatus || '',
             offerActivated: editingRecord?.offerActivated || false,
             offerActivatedAt: editingRecord?.offerActivatedAt || ''
+        } : currentSheetId === 'reminders_data' ? {
+            email: formData.email || 'تذكير بدون عنوان',
+            password: formData.password || 'متوسط',
+            password2: 'Service2030@',
+            invoiceNumber: '',
+            visa: '',
+            visaAccount: '',
+            duration: '',
+            startDate: formData.accountCreatedDate || formData.startDate || new Date().toISOString().slice(0, 10),
+            deviceType: formData.deviceType || 'تذكير عام',
+            paymentStatus: '',
+            selectedAccount: '',
+            notes: formData.notes || '',
+            accountCreatedDate: formData.accountCreatedDate || formData.startDate || new Date().toISOString().slice(0, 10),
+            reminderDays: formData.reminderDays || '0',
+            currentUses: 0,
+            maxUses: 1,
+            accountUsageStatus: '',
+            offerActivated: editingRecord?.offerActivated || false,
+            offerActivatedAt: editingRecord?.offerActivatedAt || ''
         } : {
             email: formData.email,
             password: formData.password,
-            password2: formData.password2,
+            password2: formData.password2 || 'Service2030@',
             invoiceNumber: formData.invoiceNumber,
             visa: formData.visa,
             visaAccount: formData.visaAccount,
@@ -630,7 +671,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             visaAccount: '',
             notes: '',
             accountCreatedDate: '',
-            reminderDays: '',
+            reminderDays: '20',
             offerActivated: false,
             offerActivatedAt: ''
         });
@@ -1152,9 +1193,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const active = [];
 
         records.forEach(r => {
-            if (currentSheetId === 'account_data' && r.offerActivated) return;
+            if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return;
 
-            const rem = currentSheetId === 'account_data'
+            const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                 ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
                 : calculateRemainingTime(r.startDate, r.duration, r.created_at);
 
@@ -1184,11 +1225,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         let result = records;
 
         // Filter by Expiry Status Tab (All, Near Renewal, Expired, Active)
-        if (currentSheetId === 'account_data' && offerReminderFilter !== 'all') {
+        if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && offerReminderFilter !== 'all') {
             result = result.filter(r => {
+                if (offerReminderFilter === 'completed') return !!r.offerActivated;
+                if (offerReminderFilter === 'pending') return !r.offerActivated;
                 if (r.offerActivated) return false;
                 const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
-                if (offerReminderFilter === 'pending') return rem.days !== null;
                 if (offerReminderFilter === 'near3') return rem.days !== null && rem.days > 0 && rem.days <= 3;
                 if (offerReminderFilter === 'today') return rem.days === 0;
                 if (offerReminderFilter === 'overdue') return rem.days !== null && rem.days < 0;
@@ -1198,23 +1240,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (expiryFilter === 'near') {
             result = result.filter(r => {
-                if (currentSheetId === 'account_data' && r.offerActivated) return false;
-                const rem = currentSheetId === 'account_data'
+                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
+                const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days !== null && rem.days >= 0 && rem.days <= 3 && rem.status !== 'lifetime';
             });
         } else if (expiryFilter === 'expired') {
             result = result.filter(r => {
-                if (currentSheetId === 'account_data' && r.offerActivated) return false;
-                const rem = currentSheetId === 'account_data'
+                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
+                const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days !== null && rem.days < 0;
             });
         } else if (expiryFilter === 'active') {
             result = result.filter(r => {
-                const rem = currentSheetId === 'account_data'
+                const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days > 3 || rem.status === 'lifetime';
@@ -1224,7 +1266,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         if (searchTerm.trim()) {
             const q = searchTerm.toLowerCase().trim();
             result = result.filter(r => {
-                const rem = currentSheetId === 'account_data'
+                const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return (
@@ -1245,6 +1287,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     String(r.visaAccount || '').toLowerCase().includes(q) ||
                     String(r.notes || '').toLowerCase().includes(q)
                 );
+            });
+        }
+
+        // Advanced filters: paymentStatus filter
+        if (paymentFilter !== 'all' && isClientOrMerchant) {
+            result = result.filter(r => {
+                const status = String(r.paymentStatus || 'مدفوع').toLowerCase();
+                if (paymentFilter === 'paid') return status === 'مدفوع';
+                if (paymentFilter === 'unpaid') return status !== 'مدفوع';
+                return true;
+            });
+        }
+
+        // Advanced filters: deviceType filter
+        if (deviceFilter !== 'all' && isClientOrMerchant) {
+            result = result.filter(r => {
+                return String(r.deviceType || 'جهاز') === deviceFilter;
             });
         }
 
@@ -1308,12 +1367,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     const offerReminderStats = useMemo(() => {
-        if (currentSheetId !== 'account_data') {
-            return { pending: 0, near3: 0, today: 0, overdue: 0 };
+        if (currentSheetId !== 'account_data' && currentSheetId !== 'reminders_data') {
+            return { pending: 0, near3: 0, today: 0, overdue: 0, completed: 0 };
         }
 
         return records.reduce((acc, r) => {
-            if (r.offerActivated) return acc;
+            if (r.offerActivated) {
+                acc.completed += 1;
+                return acc;
+            }
             const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
             if (rem.days === null) return acc;
             acc.pending += 1;
@@ -1321,7 +1383,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             if (rem.days === 0) acc.today += 1;
             if (rem.days < 0) acc.overdue += 1;
             return acc;
-        }, { pending: 0, near3: 0, today: 0, overdue: 0 });
+        }, { pending: 0, near3: 0, today: 0, overdue: 0, completed: 0 });
     }, [records, currentSheetId]);
 
     // Stats calculations
@@ -1331,13 +1393,26 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const accountsCount = records.filter(r => r.originSheetId === 'account_data').length;
             const clientsCount = records.filter(r => r.originSheetId === 'client_data').length;
             const merchantsCount = records.filter(r => r.originSheetId === 'merchant_data').length;
+            const remindersCount = records.filter(r => r.originSheetId === 'reminders_data').length;
             return {
                 total,
                 accountsCount,
                 clientsCount,
                 merchantsCount,
+                remindersCount,
                 nearCount: 0,
                 expiredCount: 0
+            };
+        }
+
+        if (currentSheetId === 'reminders_data') {
+            return {
+                total,
+                todayCount: offerReminderStats.today,
+                nearCount: offerReminderStats.near3,
+                overdueCount: offerReminderStats.overdue,
+                completedCount: offerReminderStats.completed,
+                pendingCount: offerReminderStats.pending
             };
         }
 
@@ -1360,7 +1435,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             nearCount: alertGroups.nearRenewal.length,
             expiredCount: alertGroups.expired.length
         };
-    }, [records, alertGroups, currentSheetId]);
+    }, [records, alertGroups, currentSheetId, offerReminderStats]);
 
     return (
         <div className="space-y-6 animate-fade-in font-sans pb-12">
@@ -1458,6 +1533,38 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
                                 <i className="fa-solid fa-envelope"></i>
+                            </div>
+                        </div>
+                    </>
+                ) : currentSheetId === 'reminders_data' ? (
+                    <>
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تذكيرات اليوم ⏰</p>
+                                <h4 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{stats.todayCount}</h4>
+                            </div>
+                            <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xl">
+                                <i className="fa-solid fa-bell"></i>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">قادمة خلال 3 أيام</p>
+                                <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.nearCount}</h4>
+                            </div>
+                            <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
+                                <i className="fa-solid fa-clock"></i>
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
+                            <div>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تم إنجازها</p>
+                                <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.completedCount}</h4>
+                            </div>
+                            <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
+                                <i className="fa-solid fa-circle-check"></i>
                             </div>
                         </div>
                     </>
@@ -1559,6 +1666,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <p className="text-xs text-slate-400 dark:text-slate-500">
                                 {isTrashSheet
                                     ? 'سلة المهملات: استعراض الحسابات والبيانات المحذوفة مع إمكانية استردادها للشيت الأصلي أو حذفها نهائياً'
+                                    : currentSheetId === 'reminders_data'
+                                    ? 'جدول التذكيرات والمهام: تذكير بمواعيد التجديدات والالتزامات الهامة في أيام محددة لتجنب نسيانها'
                                     : isClientOrMerchant
                                     ? 'العملاء والاشتراكات'
                                     : currentSheetId === 'account_data'
@@ -1593,7 +1702,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         setAccountEntryMode('available');
                                         setFormData({
                                             email: '',
-                                            password: '',
+                                            password: currentSheetId === 'reminders_data' ? '🔴 عاجل جداً' : '',
                                             password2: '',
                                             duration: '',
                                             startDate: new Date().toISOString().slice(0, 10),
@@ -1605,14 +1714,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             visaAccount: '',
                                             notes: '',
                                             accountCreatedDate: new Date().toISOString().slice(0, 10),
-                                            reminderDays: '30'
+                                            reminderDays: currentSheetId === 'reminders_data' ? '0' : '20'
                                         });
                                         setShowAddModal(true);
                                     }}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition transform active:scale-95 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-plus"></i>
-                                    <span>إضافة بيانات جديدة</span>
+                                    <span>{currentSheetId === 'reminders_data' ? 'إضافة تذكير جديد' : 'إضافة بيانات جديدة'}</span>
                                 </button>
                             )
                         )}
@@ -1629,7 +1738,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder={
-                                isClientOrMerchant
+                                currentSheetId === 'reminders_data'
+                                    ? "بحث في عنوان التذكير، الأولوية، التاريخ، الملاحظات..."
+                                    : isClientOrMerchant
                                     ? "بحث في الإيميل، الباسورد، مدة الاشتراك..."
                                     : currentSheetId === 'account_data'
                                     ? "بحث في الإيميل، الباسورد، تاريخ الإنشاء، التذكير، الملاحظات..."
@@ -1668,6 +1779,50 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </div>
                     </div>
                 </div>
+
+                {currentSheetId === 'reminders_data' && (
+                    <div className="flex flex-wrap items-center gap-2 pt-3">
+                        {[
+                            { id: 'all', label: 'كل التذكيرات', count: records.length, icon: 'fa-list', cls: 'slate' },
+                            { id: 'pending', label: 'قيد الانتظار', count: offerReminderStats.pending, icon: 'fa-hourglass-half', cls: 'purple' },
+                            { id: 'today', label: 'تذكيرات اليوم', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
+                            { id: 'near3', label: 'قادمة خلال 3 أيام', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
+                            { id: 'overdue', label: 'متأخرة', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
+                            { id: 'completed', label: 'تم الإنجاز', count: offerReminderStats.completed, icon: 'fa-circle-check', cls: 'emerald' },
+                        ].map(item => {
+                            const active = offerReminderFilter === item.id;
+                            const colorClass = item.cls === 'amber'
+                                ? active ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100'
+                                : item.cls === 'purple'
+                                ? active ? 'bg-purple-600 text-white border-purple-600' : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100'
+                                : item.cls === 'red'
+                                ? active ? 'bg-red-600 text-white border-red-600' : 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200 dark:border-red-800 hover:bg-red-100'
+                                : item.cls === 'rose'
+                                ? active ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100'
+                                : item.cls === 'emerald'
+                                ? active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'
+                                : active ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100';
+                            return (
+                                <button
+                                    key={item.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setOfferReminderFilter(item.id);
+                                        setCurrentPage(1);
+                                    }}
+                                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border text-[11px] font-black transition cursor-pointer ${colorClass}`}
+                                >
+                                    <i className={`fa-solid ${item.icon} text-[10px]`}></i>
+                                    <span>{item.label}</span>
+                                    <span className={`min-w-5 h-5 px-1 rounded-full inline-flex items-center justify-center text-[10px] ${active ? 'bg-white/20 text-white' : 'bg-white text-slate-700 border border-black/5'}`}>
+                                        {item.count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 {currentSheetId === 'account_data' && (
                     <div className="flex flex-wrap items-center gap-2 pt-3">
                         {[
@@ -1709,6 +1864,94 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
+            {/* Advanced Filters Panel - Client/Merchant Only */}
+            {isClientOrMerchant && (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
+                    <button
+                        type="button"
+                        onClick={() => setShowAdvancedFilters(v => !v)}
+                        className="w-full flex items-center justify-between px-4 py-3 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition"
+                    >
+                        <div className="flex items-center gap-2">
+                            <i className="fa-solid fa-sliders text-indigo-500"></i>
+                            <span>فلاتر متقدمة</span>
+                            {(paymentFilter !== 'all' || deviceFilter !== 'all') && (
+                                <span className="bg-indigo-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">
+                                    {[paymentFilter !== 'all' ? 1 : 0, deviceFilter !== 'all' ? 1 : 0].reduce((a,b)=>a+b,0)} فعّال
+                                </span>
+                            )}
+                        </div>
+                        <i className={`fa-solid fa-chevron-${showAdvancedFilters ? 'up' : 'down'} text-slate-400`}></i>
+                    </button>
+
+                    {showAdvancedFilters && (
+                        <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Payment Status Filter */}
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <i className="fa-solid fa-money-bill-wave text-emerald-500"></i>
+                                    حالة الدفع
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {[
+                                        { id: 'all', label: 'الكل', icon: 'fa-list' },
+                                        { id: 'paid', label: '✅ مدفوع', icon: 'fa-check-circle' },
+                                        { id: 'unpaid', label: '❌ غير مدفوع', icon: 'fa-times-circle' },
+                                    ].map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => { setPaymentFilter(opt.id); setCurrentPage(1); }}
+                                            className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition ${paymentFilter === opt.id ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'}`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Device Type Filter */}
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <i className="fa-solid fa-desktop text-blue-500"></i>
+                                    نوع الجهاز
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {[
+                                        { id: 'all', label: 'الكل' },
+                                        { id: 'جهاز', label: '💻 جهاز واحد' },
+                                        { id: 'جهازين', label: '🖥️ جهازين' },
+                                    ].map(opt => (
+                                        <button
+                                            key={opt.id}
+                                            type="button"
+                                            onClick={() => { setDeviceFilter(opt.id); setCurrentPage(1); }}
+                                            className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition ${deviceFilter === opt.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-900/20'}`}
+                                        >
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Reset All Filters */}
+                            {(paymentFilter !== 'all' || deviceFilter !== 'all') && (
+                                <div className="sm:col-span-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setPaymentFilter('all'); setDeviceFilter('all'); setCurrentPage(1); }}
+                                        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-[11px] font-bold hover:bg-rose-100 transition"
+                                    >
+                                        <i className="fa-solid fa-rotate-right"></i>
+                                        إعادة تعيين الفلاتر المتقدمة
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+
             {/* Data Table */}
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
                 <div className="overflow-x-auto">
@@ -1716,138 +1959,174 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <thead>
                             <tr className="bg-slate-50/80 dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 border-b border-slate-200/80 dark:border-slate-700/80 font-bold select-none">
                                 <th className="px-1 py-1.5 w-7 text-center text-[10px]">#</th>
-                                <th
-                                    onClick={() => setSortBy({ field: 'email', asc: sortBy.field === 'email' ? !sortBy.asc : true })}
-                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                >
-                                    <div className="flex items-center gap-1">
-                                        <span>البريد الإلكتروني</span>
-                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                    </div>
-                                </th>
-                                <th className="px-1 py-1.5">Outlook Password</th>
-                                <th className="px-1 py-1.5">Adobe Password</th>
-                                {isTrashSheet ? (
+                                {currentSheetId === 'reminders_data' ? (
                                     <>
                                         <th
-                                            onClick={() => setSortBy({ field: 'originSheetName', asc: sortBy.field === 'originSheetName' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
+                                            onClick={() => setSortBy({ field: 'email', asc: sortBy.field === 'email' ? !sortBy.asc : true })}
+                                            className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>الشيت الأصلي</span>
+                                                <span>عنوان التذكير والمهمة</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'deletedAt', asc: sortBy.field === 'deletedAt' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>تاريخ الحذف</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-purple-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>بيانات الحساب</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                    </>
-                                ) : isClientOrMerchant ? (
-                                    <>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'duration', asc: sortBy.field === 'duration' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>مدة الاشتراك</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'remainingDays', asc: sortBy.field === 'remainingDays' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>المدة المتبقية</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'deviceType', asc: sortBy.field === 'deviceType' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>نوع الاشتراك</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'paymentStatus', asc: sortBy.field === 'paymentStatus' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>حالة الدفع</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
-                                    </>
-                                ) : currentSheetId === 'account_data' ? (
-                                    <>
+                                        <th className="px-2 py-1.5 text-center">الأولوية / التصنيف</th>
                                         <th
                                             onClick={() => setSortBy({ field: 'accountCreatedDate', asc: sortBy.field === 'accountCreatedDate' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                            className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>تاريخ الإنشاء</span>
+                                                <span>موعد التذكير</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
                                         <th
                                             onClick={() => setSortBy({ field: 'accountReminderDays', asc: sortBy.field === 'accountReminderDays' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                            className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>التذكير</span>
+                                                <span>الحالة والمتبقي</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'currentUses', asc: sortBy.field === 'currentUses' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>استخدام الحساب</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
+                                        <th className="px-2 py-1.5">الملاحظات والتفاصيل</th>
                                     </>
                                 ) : (
                                     <>
                                         <th
-                                            onClick={() => setSortBy({ field: 'invoiceNumber', asc: sortBy.field === 'invoiceNumber' ? !sortBy.asc : true })}
+                                            onClick={() => setSortBy({ field: 'email', asc: sortBy.field === 'email' ? !sortBy.asc : true })}
                                             className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>رقم الفاتورة</span>
+                                                <span>البريد الإلكتروني</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-1.5 py-1.5">الفيزا</th>
-                                        <th className="px-1.5 py-1.5">Edu Mail</th>
-                                        <th
-                                            onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
-                                            className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
-                                        >
-                                            <div className="flex items-center gap-1">
-                                                <span>بيانات الحساب</span>
-                                                <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
-                                            </div>
-                                        </th>
+                                        <th className="px-1 py-1.5">Outlook Password</th>
+                                        <th className="px-1 py-1.5">Adobe Password</th>
+                                        {isTrashSheet ? (
+                                            <>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'originSheetName', asc: sortBy.field === 'originSheetName' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>الشيت الأصلي</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'deletedAt', asc: sortBy.field === 'deletedAt' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>تاريخ الحذف</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-purple-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>بيانات الحساب</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                            </>
+                                        ) : isClientOrMerchant ? (
+                                            <>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'duration', asc: sortBy.field === 'duration' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>مدة الاشتراك</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'remainingDays', asc: sortBy.field === 'remainingDays' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>المدة المتبقية</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'deviceType', asc: sortBy.field === 'deviceType' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>نوع الاشتراك</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'paymentStatus', asc: sortBy.field === 'paymentStatus' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>حالة الدفع</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                            </>
+                                        ) : currentSheetId === 'account_data' ? (
+                                            <>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'accountCreatedDate', asc: sortBy.field === 'accountCreatedDate' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>تاريخ الإنشاء</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'accountReminderDays', asc: sortBy.field === 'accountReminderDays' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>التذكير</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'currentUses', asc: sortBy.field === 'currentUses' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>استخدام الحساب</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'invoiceNumber', asc: sortBy.field === 'invoiceNumber' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>رقم الفاتورة</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th className="px-1.5 py-1.5">الفيزا</th>
+                                                <th className="px-1.5 py-1.5">Edu Mail</th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>بيانات الحساب</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                            </>
+                                        )}
                                     </>
                                 )}
                                 <th className="px-1 py-1.5 text-center w-12 text-[11px]">إجراءات</th>
@@ -1857,15 +2136,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
                             {paginatedRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={isTrashSheet ? 8 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 8 : 9))} className="p-12 text-center text-slate-400">
+                                    <td colSpan={isTrashSheet ? 8 : (currentSheetId === 'reminders_data' ? 6 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 8 : 9)))} className="p-12 text-center text-slate-400">
                                         <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-2xl">
-                                            <i className={`fa-solid ${isTrashSheet ? 'fa-trash-can text-rose-400' : 'fa-folder-open'}`}></i>
+                                            <i className={`fa-solid ${isTrashSheet ? 'fa-trash-can text-rose-400' : (currentSheetId === 'reminders_data' ? 'fa-bell text-amber-500' : 'fa-folder-open')}`}></i>
                                         </div>
                                         <p className="font-bold text-sm">
-                                            {isTrashSheet ? 'سلة المهملات فارغة تماماً' : 'لا توجد سجلات في هذا الشيت حتى الآن'}
+                                            {isTrashSheet ? 'سلة المهملات فارغة تماماً' : (currentSheetId === 'reminders_data' ? 'لا توجد تذكيرات مسجلة حتى الآن' : 'لا توجد سجلات في هذا الشيت حتى الآن')}
                                         </p>
                                         <p className="text-xs mt-1 text-slate-400">
-                                            {isTrashSheet ? 'أي حسابات أو بيانات يتم حذفها ستظهر هنا ويمكنك استردادها في أي وقت' : 'انقر على "إضافة بيان جديد" للبدء في حفظ البيانات'}
+                                            {isTrashSheet ? 'أي حسابات أو بيانات يتم حذفها ستظهر هنا ويمكنك استردادها في أي وقت' : (currentSheetId === 'reminders_data' ? 'انقر على "إضافة تذكير جديد" لحفظ موعد أو مهمة لا تريد نسيانها' : 'انقر على "إضافة بيان جديد" للبدء في حفظ البيانات')}
                                         </p>
                                     </td>
                                 </tr>
@@ -1873,6 +2152,154 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 paginatedRecords.map((rec, index) => {
                                     const rowNum = pageSize === 'all' ? index + 1 : (currentPage - 1) * pageSize + index + 1;
                                     const isSelected = selectedIds.has(rec.id);
+
+                                    if (currentSheetId === 'reminders_data') {
+                                        return (
+                                            <tr
+                                                key={rec.id}
+                                                className={`transition-colors ${rec.offerActivated ? 'bg-slate-50/50 dark:bg-slate-900/40 opacity-75' : 'hover:bg-amber-50/30 dark:hover:bg-slate-800/50'}`}
+                                            >
+                                                {/* Row # */}
+                                                <td className="px-1 py-2 text-center font-mono text-slate-400 text-[10px]">
+                                                    {rowNum}
+                                                </td>
+
+                                                {/* Reminder Title & Quick Complete */}
+                                                <td className="px-2 py-2 font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleToggleOfferActivated(rec.id)}
+                                                            className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer flex-shrink-0 ${
+                                                                rec.offerActivated
+                                                                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
+                                                                    : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 text-transparent hover:text-emerald-500 bg-white dark:bg-slate-800'
+                                                            }`}
+                                                            title={rec.offerActivated ? 'انقر لإلغاء الإنجاز وإعادته لقيد الانتظار' : 'انقر للتعليم كمكتمل'}
+                                                        >
+                                                            <i className="fa-solid fa-check text-[10px]"></i>
+                                                        </button>
+                                                        <div className="min-w-0 flex items-center gap-1.5 flex-1">
+                                                            <span className={`text-xs font-bold truncate ${
+                                                                rec.offerActivated ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'
+                                                            }`} title={rec.email}>
+                                                                {rec.email || 'بدون عنوان'}
+                                                            </span>
+                                                            <button
+                                                                onClick={() => handleCopy(rec.email, `rem_${rec.id}`)}
+                                                                className="text-slate-400 hover:text-indigo-600 p-0.5 transition flex-shrink-0"
+                                                                title="نسخ عنوان التذكير"
+                                                            >
+                                                                <i className={`fa-solid ${copiedField === `rem_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </td>
+
+                                                {/* Priority / Category */}
+                                                <td className="px-2 py-2 text-center whitespace-nowrap">
+                                                    {(() => {
+                                                        const p = rec.password || '🟢 عادي';
+                                                        const isUrgent = p.includes('عاجل');
+                                                        const isMedium = p.includes('متوسط');
+                                                        const isRenewal = p.includes('تجديد');
+                                                        const isClient = p.includes('عميل');
+                                                        const isMoney = p.includes('دفع') || p.includes('مالي') || p.includes('سداد');
+                                                        const cls = isUrgent
+                                                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
+                                                            : isMedium
+                                                            ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                                                            : isRenewal
+                                                            ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800'
+                                                            : isClient
+                                                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800'
+                                                            : isMoney
+                                                            ? 'bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 border-orange-200 dark:border-orange-800'
+                                                            : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800';
+                                                        return (
+                                                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${cls}`}>
+                                                                <span>{p}</span>
+                                                            </span>
+                                                        );
+                                                    })()}
+                                                </td>
+
+                                                {/* Reminder Target Date */}
+                                                <td className="px-2 py-2 whitespace-nowrap font-mono text-xs">
+                                                    <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                                                        <i className="fa-regular fa-calendar text-amber-500 text-[10px]"></i>
+                                                        <span className="font-bold">{rec.accountCreatedDate || '-'}</span>
+                                                    </div>
+                                                </td>
+
+                                                {/* Status & Countdown Badge */}
+                                                <td className="px-2 py-2 whitespace-nowrap">
+                                                    {rec.offerActivated ? (
+                                                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+                                                            <i className="fa-solid fa-circle-check"></i>
+                                                            <span>تم الإنجاز ✓</span>
+                                                        </span>
+                                                    ) : (
+                                                        (() => {
+                                                            const rem = calculateAccountReminder(rec.accountCreatedDate, rec.reminderDays, rec.created_at);
+                                                            return (
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black border ${rem.badgeClass}`}>
+                                                                        <i className={`fa-solid ${rem.days === 0 ? 'fa-bell fa-shake text-rose-600' : rem.days < 0 ? 'fa-triangle-exclamation' : 'fa-clock'} text-[9px]`}></i>
+                                                                        <span>{rem.badgeText}</span>
+                                                                    </span>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => handleToggleOfferActivated(rec.id)}
+                                                                        className="text-[10px] font-bold text-slate-500 hover:text-emerald-600 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 transition cursor-pointer"
+                                                                        title="تعليم كمكتمل"
+                                                                    >
+                                                                        إنجاز
+                                                                    </button>
+                                                                </div>
+                                                            );
+                                                        })()
+                                                    )}
+                                                </td>
+
+                                                {/* Notes */}
+                                                <td className="px-2 py-2 font-medium max-w-[280px]">
+                                                    {rec.notes ? (
+                                                        <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-400 text-xs">
+                                                            <i className="fa-solid fa-note-sticky text-amber-500 text-[10px] flex-shrink-0"></i>
+                                                            <span className="truncate" title={rec.notes}>{rec.notes}</span>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-slate-300 dark:text-slate-600">-</span>
+                                                    )}
+                                                </td>
+
+                                                {/* Actions */}
+                                                <td className="px-1 py-1 text-center w-12">
+                                                    <div className="flex items-center justify-center gap-1">
+                                                        {canEdit && (
+                                                            <button
+                                                                onClick={() => handleOpenEdit(rec)}
+                                                                className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
+                                                                title="تعديل"
+                                                            >
+                                                                <i className="fa-solid fa-pen text-[8.5px]"></i>
+                                                            </button>
+                                                        )}
+                                                        {canDelete && (
+                                                            <button
+                                                                onClick={() => handleDeleteRecord(rec.id)}
+                                                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
+                                                                title="حذف ونقل إلى سلة المهملات"
+                                                            >
+                                                                <i className="fa-solid fa-trash text-[8.5px]"></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        );
+                                    }
 
                                     const isPassVisible = visibleSecrets[`${rec.id}_pass`] !== false;
                                     const isPass2Visible = visibleSecrets[`${rec.id}_pass2`] !== false;
@@ -1992,12 +2419,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 client_data: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200/70 dark:border-blue-800/60',
                                                                 merchant_data: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/70 dark:border-emerald-800/60',
                                                                 account_data: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/70 dark:border-purple-800/60',
+                                                                reminders_data: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/60',
                                                             }[originId] || 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200';
 
                                                             const originIcon = {
                                                                 client_data: 'fa-solid fa-users text-blue-500',
                                                                 merchant_data: 'fa-solid fa-store text-emerald-500',
                                                                 account_data: 'fa-solid fa-user-gear text-purple-500',
+                                                                reminders_data: 'fa-solid fa-bell text-amber-500',
                                                             }[originId] || 'fa-solid fa-file text-slate-400';
 
                                                             const name = rec.originSheetName || sheetsList.find(s => s.id === originId)?.name || 'بيانات الحساب';
@@ -2605,57 +3034,171 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     )}
                                 </div>
                             )}
-                            {/* Email */}
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    البريد الإلكتروني (Email)
-                                </label>
-                                <div className="relative">
-                                    <i className="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                                    <input
-                                        type="text"
-                                        value={formData.email}
-                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        placeholder="example@domain.com"
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
-                                    />
-                                </div>
-                            </div>
+                            {currentSheetId === 'reminders_data' ? (
+                                <div className="space-y-4">
+                                    {/* Reminder Title */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                                            عنوان التذكير أو المطلوب تذكيره <span className="text-rose-500">*</span>
+                                        </label>
+                                        <div className="relative">
+                                            <i className="fa-solid fa-bell absolute right-3.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs"></i>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                placeholder="مثال: تجديد اشتراك أدوبي لعميل، سداد فيزا، اتصال هاتفي..."
+                                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-bold"
+                                            />
+                                        </div>
+                                    </div>
 
-                            {/* Passwords (Grid of 2) */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                        {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'كلمة المرور 1 (Password)'}
-                                    </label>
-                                    <div className="relative">
-                                        <i className="fa-solid fa-lock absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                    {/* Priority / Category */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
+                                            الأولوية والتصنيف
+                                        </label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {[
+                                                { id: '🔴 عاجل جداً', label: '🔴 عاجل جداً' },
+                                                { id: '🟡 أولوية متوسطة', label: '🟡 أولوية متوسطة' },
+                                                { id: '🟢 عادي', label: '🟢 عادي' },
+                                                { id: '🟣 تجديد واشتراك', label: '🟣 تجديد واشتراك' },
+                                                { id: '🔵 متابعة عميل', label: '🔵 متابعة عميل' },
+                                                { id: '🟠 سداد مالي / دفع', label: '🟠 سداد مالي / دفع' },
+                                            ].map(opt => {
+                                                const currentVal = formData.password || '🔴 عاجل جداً';
+                                                const isSel = currentVal === opt.id || currentVal.includes(opt.id.slice(2, 6));
+                                                return (
+                                                    <button
+                                                        key={opt.id}
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, password: opt.id })}
+                                                        className={`px-3 py-2 rounded-xl border text-xs font-bold transition flex items-center justify-center gap-1.5 cursor-pointer ${
+                                                            isSel
+                                                                ? 'ring-2 ring-indigo-500 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border-indigo-500 shadow-xs'
+                                                                : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                                                        }`}
+                                                    >
+                                                        <span>{opt.label}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Reminder Target Date & Quick Day Pickers */}
+                                    <div className="p-3.5 bg-amber-50/60 dark:bg-amber-950/30 rounded-2xl border border-amber-200/70 dark:border-amber-800/50 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
+                                                <i className="fa-regular fa-calendar-check text-amber-600 text-sm"></i>
+                                                <span>موعد التذكير المحدد (اليوم المستهدف)</span>
+                                            </label>
+                                            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                                                {(() => {
+                                                    const target = formData.accountCreatedDate || new Date().toISOString().slice(0, 10);
+                                                    const rem = calculateAccountReminder(target, '0', null);
+                                                    return rem.badgeText;
+                                                })()}
+                                            </span>
+                                        </div>
+
                                         <input
-                                            type="text"
-                                            value={formData.password}
-                                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                                            placeholder={currentSheetId === 'account_data' ? 'Outlook password' : 'كلمة المرور الرئيسية'}
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
+                                            type="date"
+                                            value={formData.accountCreatedDate || new Date().toISOString().slice(0, 10)}
+                                            onChange={(e) => setFormData({ ...formData, accountCreatedDate: e.target.value, startDate: e.target.value, reminderDays: '0' })}
+                                            className="w-full bg-white dark:bg-slate-850 border border-amber-300/80 dark:border-amber-700 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                                         />
+
+                                        {/* Quick Date Chips */}
+                                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                            <span className="text-[10.5px] text-slate-500 font-bold ml-1">تحديد سريع:</span>
+                                            {[
+                                                { label: 'اليوم', daysToAdd: 0 },
+                                                { label: 'غداً', daysToAdd: 1 },
+                                                { label: 'بعد 3 أيام', daysToAdd: 3 },
+                                                { label: 'بعد أسبوع', daysToAdd: 7 },
+                                                { label: 'بعد أسبوعين', daysToAdd: 14 },
+                                                { label: 'بعد شهر (30 يوم)', daysToAdd: 30 },
+                                            ].map(chip => {
+                                                const d = new Date();
+                                                d.setDate(d.getDate() + chip.daysToAdd);
+                                                const iso = d.toISOString().slice(0, 10);
+                                                const active = formData.accountCreatedDate === iso;
+                                                return (
+                                                    <button
+                                                        key={chip.label}
+                                                        type="button"
+                                                        onClick={() => setFormData({ ...formData, accountCreatedDate: iso, startDate: iso, reminderDays: '0' })}
+                                                        className={`px-2.5 py-1 rounded-lg text-[10.5px] font-bold border transition cursor-pointer ${
+                                                            active
+                                                                ? 'bg-amber-500 text-white border-amber-500 shadow-xs'
+                                                                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-amber-100/60'
+                                                        }`}
+                                                    >
+                                                        {chip.label}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 </div>
-
-                                <div>
-                                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                        {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'كلمة المرور 2 (Password 2)'}
-                                    </label>
-                                    <div className="relative">
-                                        <i className="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                                        <input
-                                            type="text"
-                                            value={formData.password2}
-                                            onChange={(e) => setFormData({ ...formData, password2: e.target.value })}
-                                            placeholder={currentSheetId === 'account_data' ? 'Adobe password' : 'كلمة مرور بديلة / كود إضافي'}
-                                            className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
-                                        />
+                            ) : (
+                                <>
+                                    {/* Email */}
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                            البريد الإلكتروني (Email)
+                                        </label>
+                                        <div className="relative">
+                                            <i className="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                            <input
+                                                type="text"
+                                                value={formData.email}
+                                                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                                placeholder="example@domain.com"
+                                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
+                                            />
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
+
+                                    {/* Passwords (Grid of 2) */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'كلمة المرور 1 (Password)'}
+                                            </label>
+                                            <div className="relative">
+                                                <i className="fa-solid fa-lock absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    value={formData.password}
+                                                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                                                    placeholder={currentSheetId === 'account_data' ? 'Outlook password' : 'كلمة المرور الرئيسية'}
+                                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'كلمة المرور 2 (Password 2)'}
+                                            </label>
+                                            <div className="relative">
+                                                <i className="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    value={formData.password2}
+                                                    onChange={(e) => setFormData({ ...formData, password2: e.target.value })}
+                                                    placeholder={currentSheetId === 'account_data' ? 'Adobe password' : 'كلمة مرور بديلة / كود إضافي'}
+                                                    className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
 
                             {/* Duration & Start Date (for Client / Merchant) */}
                             {isClientOrMerchant && (
@@ -2891,7 +3434,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     max="3650"
                                                     value={formData.reminderDays}
                                                     onChange={(e) => setFormData({ ...formData, reminderDays: e.target.value })}
-                                                    placeholder="مثال: 30"
+                                                    placeholder="مثال: 20"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                                                 />
                                             </div>
@@ -2901,7 +3444,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Quick chips for reminder days */}
                                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
                                         <span className="text-[10.5px] text-slate-400 font-bold ml-1">خيارات سريعة:</span>
-                                        {[15, 30, 45, 60, 90].map(days => (
+                                        {[15, 20, 30, 45, 60].map(days => (
                                             <button
                                                 key={days}
                                                 type="button"
@@ -2937,7 +3480,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             )}
 
                             {/* Invoice & Visa (for Invoice Sheet & Account Sheet - hidden in main table for Account sheet) */}
-                            {!isClientOrMerchant && (
+                            {!isClientOrMerchant && currentSheetId !== 'reminders_data' && (
                                 <div className="space-y-3">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
@@ -2994,13 +3537,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             {/* Notes Field (Directly under duration / visa for all sheets) */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    ملاحظات إضافية
+                                    {currentSheetId === 'reminders_data' ? 'تفاصيل وملاحظات التذكير' : 'ملاحظات إضافية'}
                                 </label>
                                 <textarea
-                                    rows={2}
+                                    rows={currentSheetId === 'reminders_data' ? 3 : 2}
                                     value={formData.notes}
                                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                    placeholder="أي تفاصيل أو ملاحظات إضافية..."
+                                    placeholder={currentSheetId === 'reminders_data' ? 'اكتب أي تفاصيل، أرقام تواصل، حسابات، أو ملاحظات هامة تخص التذكير...' : 'أي تفاصيل أو ملاحظات إضافية...'}
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
                                 />
                             </div>

@@ -7,6 +7,7 @@ import Login from './components/Login';
 import Sidebar from './components/Sidebar';
 import CustomSheets from './components/CustomSheets';
 import DashboardAlerts from './components/DashboardAlerts';
+import Reports from './components/Reports';
 import Users from './components/Users';
 import { startSheetSync, SYNC_STATUS } from './services/sheetSync';
 import './workspace.css';
@@ -16,10 +17,11 @@ const MainLayout = () => {
   const { activeTab, setActiveTab } = useData();
   const [isSidebarOpen, setSidebarOpen] = useState(false);
   const [syncStatus, setSyncStatus] = useState('loading');
-  const permittedTabs = ['dashboard', 'alerts', 'client_data', 'merchant_data', 'account_data', 'trash_data', 'users'].filter(tab => {
+  const permittedTabs = ['dashboard', 'alerts', 'reports', 'client_data', 'merchant_data', 'account_data', 'reminders_data', 'trash_data', 'users'].filter(tab => {
     if (!user) return false;
     if (user.role === 'admin') return true;
     if (tab === 'users') return false;
+    if (tab === 'reports') return true;
     return hasPermission(tab) || hasPermission('sheet_' + tab);
   });
   const canViewActiveTab = permittedTabs.includes(activeTab);
@@ -82,6 +84,8 @@ const MainLayout = () => {
               mode={activeTab === 'alerts' ? 'alerts' : 'dashboard'}
               onNavigateSheet={(sheetId) => setActiveTab(sheetId)}
             />
+          ) : activeTab === 'reports' ? (
+            <Reports />
           ) : activeTab === 'users' ? (
             <Users />
           ) : (

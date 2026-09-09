@@ -710,6 +710,38 @@ export const usersAPI = {
         if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
         const { error } = await supabase.from('users').delete().eq('id', id);
         if (error) throw error;
+    },
+
+    async changePassword(userId, currentPassword, newPassword) {
+        if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+        // Fetch user to verify current password
+        const { data, error } = await supabase
+            .from('users')
+            .select('id, password')
+            .eq('id', userId)
+            .maybeSingle();
+        if (error || !data) throw new Error('تعذر التحقق من البيانات');
+
+        const isHashed = typeof data.password === 'string' && data.password.startsWith('$2');
+        let isValid = false;
+        if (isHashed) {
+            const bcrypt = await import('bcryptjs');
+            const bcryptLib = bcrypt.default || bcrypt;
+            isValid = await bcryptLib.compare(currentPassword, data.password);
+        } else {
+            isValid = currentPassword === data.password;
+        }
+
+        if (!isValid) throw new Error('كلمة المرور الحالية غير صحيحة');
+
+        const bcrypt = await import('bcryptjs');
+        const bcryptLib = bcrypt.default || bcrypt;
+        const hashedNew = await bcryptLib.hash(newPassword, 10);
+        const { error: updateError } = await supabase
+            .from('users')
+            .update({ password: hashedNew })
+            .eq('id', userId);
+        if (updateError) throw updateError;
     }
 };
 

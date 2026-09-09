@@ -2,13 +2,14 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useData } from '../context/DataContext';
 import { useAuth } from '../context/AuthContext';
 import { calculateRemainingTime, calculateAccountReminder } from '../utils/dataRepair';
-import { sheetsAPI } from '../services/api';
+import { sheetsAPI, usersAPI } from '../services/api';
 import { SHEETS_CHANGED } from '../services/sheetSync';
 
 const DEFAULT_SHEETS = [
     { id: 'client_data', label: 'بيانات العميل', icon: 'fa-user-tie', color: 'text-blue-400', activeBg: 'bg-blue-600' },
     { id: 'merchant_data', label: 'بيانات التاجر', icon: 'fa-store', color: 'text-emerald-400', activeBg: 'bg-emerald-600' },
     { id: 'account_data', label: 'بيانات الحساب', icon: 'fa-shield-halved', color: 'text-purple-400', activeBg: 'bg-purple-600' },
+    { id: 'reminders_data', label: 'تذكيرات عامة', icon: 'fa-bell', color: 'text-amber-400', activeBg: 'bg-amber-600' },
     { id: 'trash_data', label: 'سلة المهملات', icon: 'fa-trash-can', color: 'text-rose-400', activeBg: 'bg-rose-600' },
 ];
 
@@ -25,6 +26,33 @@ export default function Sidebar ({ isOpen, onClose }) {
         }
         return false;
     });
+
+    // Password change modal state
+    const [showChangePwd, setShowChangePwd] = useState(false);
+    const [pwdForm, setPwdForm] = useState({ current: '', newPwd: '', confirm: '' });
+    const [pwdError, setPwdError] = useState('');
+    const [pwdSuccess, setPwdSuccess] = useState('');
+    const [pwdSaving, setPwdSaving] = useState(false);
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        setPwdError('');
+        setPwdSuccess('');
+        if (!pwdForm.current.trim()) return setPwdError('يرجى إدخال كلمة المرور الحالية');
+        if (pwdForm.newPwd.length < 6) return setPwdError('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+        if (pwdForm.newPwd !== pwdForm.confirm) return setPwdError('كلمة المرور الجديدة وتأكيدها غير متطابقتين');
+        setPwdSaving(true);
+        try {
+            await usersAPI.changePassword(user.id, pwdForm.current, pwdForm.newPwd);
+            setPwdSuccess('تم تغيير كلمة المرور بنجاح ✓');
+            setPwdForm({ current: '', newPwd: '', confirm: '' });
+            setTimeout(() => { setShowChangePwd(false); setPwdSuccess(''); }, 2000);
+        } catch (err) {
+            setPwdError(err.message || 'حدث خطأ أثناء تغيير كلمة المرور');
+        } finally {
+            setPwdSaving(false);
+        }
+    };
 
     // Apply dark mode on mount
     useEffect(() => {
@@ -84,9 +112,19 @@ export default function Sidebar ({ isOpen, onClose }) {
                 : DEFAULT_SHEETS.filter(item => hasPermission('sheet_' + item.id) || hasPermission(item.id));
 
             permittedSheets.forEach(s => {
-                if (s.id === 'trash_data' || s.id === 'account_data') return;
+                if (s.id === 'trash_data') return;
                 const parsed = recordsMap?.[s.id];
                 if (!Array.isArray(parsed)) return;
+
+                if (s.id === 'account_data' || s.id === 'reminders_data') {
+                    parsed.forEach(r => {
+                        if (r.offerActivated) return;
+                        const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
+                        if (rem && rem.days !== null && rem.days <= 3) alertsTotal++;
+                    });
+                    return;
+                }
+
                 parsed.forEach(r => {
                     const rem = calculateRemainingTime(r.startDate, r.duration, r.created_at);
                     if (!rem || rem.status === 'none' || rem.status === 'lifetime') return;
@@ -155,6 +193,23 @@ export default function Sidebar ({ isOpen, onClose }) {
                             </div>
                         </button>
                     )}
+
+                    {/* Reports Button */}
+                    <button
+                        onClick={() => { setActiveTab('reports'); onClose(); }}
+                        className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl transition-all duration-200 group relative cursor-pointer ${
+                            activeTab === 'reports'
+                                ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg font-black scale-[1.02]'
+                                : 'text-slate-300 hover:bg-slate-800 hover:text-white font-bold'
+                        }`}
+                    >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                            <i className={`fa-solid fa-chart-pie w-5 text-center text-base transition-transform group-hover:scale-110 ${
+                                activeTab === 'reports' ? 'text-white' : 'text-indigo-400'
+                            }`}></i>
+                            <span className="text-sm truncate">التقارير</span>
+                        </div>
+                    </button>
 
                     {/* Users Management Button - Admin Only */}
                     {user?.role === 'admin' && (
@@ -274,15 +329,164 @@ export default function Sidebar ({ isOpen, onClose }) {
                     </div>
 
                     {user && (
-                        <button
-                            onClick={logout}
-                            className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-500/10 hover:text-red-400 text-slate-400 py-2.5 rounded-xl transition-all border border-slate-700 hover:border-red-500/50 font-bold text-xs"
-                        >
-                            <i className="fa-solid fa-right-from-bracket"></i> تسجيل خروج
-                        </button>
+                        <div className="space-y-2">
+                            <button
+                                onClick={() => setShowChangePwd(true)}
+                                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-indigo-500/10 hover:text-indigo-400 text-slate-400 py-2 rounded-xl transition-all border border-slate-700 hover:border-indigo-500/50 font-bold text-xs"
+                            >
+                                <i className="fa-solid fa-key"></i> تغيير كلمة المرور
+                            </button>
+                            <button
+                                onClick={logout}
+                                className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-red-500/10 hover:text-red-400 text-slate-400 py-2.5 rounded-xl transition-all border border-slate-700 hover:border-red-500/50 font-bold text-xs"
+                            >
+                                <i className="fa-solid fa-right-from-bracket"></i> تسجيل خروج
+                            </button>
+                        </div>
                     )}
                 </div>
             </aside>
+
+            {showChangePwd && (
+                <ChangePasswordModal onClose={() => { setShowChangePwd(false); }} />
+            )}
         </>
+    );
+}
+
+// Password Change Modal - standalone component that gets rendered in App
+export function ChangePasswordModal({ onClose }) {
+    const { user } = useAuth();
+    const [pwdForm, setPwdForm] = useState({ current: '', newPwd: '', confirm: '' });
+    const [pwdError, setPwdError] = useState('');
+    const [pwdSuccess, setPwdSuccess] = useState('');
+    const [pwdSaving, setPwdSaving] = useState(false);
+    const [showCurrent, setShowCurrent] = useState(false);
+    const [showNew, setShowNew] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setPwdError('');
+        setPwdSuccess('');
+        if (!pwdForm.current.trim()) return setPwdError('يرجى إدخال كلمة المرور الحالية');
+        if (pwdForm.newPwd.length < 6) return setPwdError('كلمة المرور الجديدة يجب أن تكون 6 أحرف على الأقل');
+        if (pwdForm.newPwd !== pwdForm.confirm) return setPwdError('كلمة المرور الجديدة وتأكيدها غير متطابقتين');
+        setPwdSaving(true);
+        try {
+            await usersAPI.changePassword(user.id, pwdForm.current, pwdForm.newPwd);
+            setPwdSuccess('تم تغيير كلمة المرور بنجاح ✓');
+            setPwdForm({ current: '', newPwd: '', confirm: '' });
+            setTimeout(onClose, 2000);
+        } catch (err) {
+            setPwdError(err.message || 'حدث خطأ أثناء تغيير كلمة المرور');
+        } finally {
+            setPwdSaving(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200/80 dark:border-slate-700 overflow-hidden">
+                <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white shadow-md">
+                            <i className="fa-solid fa-key text-sm"></i>
+                        </div>
+                        <div>
+                            <h3 className="font-black text-slate-800 dark:text-white text-sm">تغيير كلمة المرور</h3>
+                            <p className="text-xs text-slate-400">{user?.username}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition">
+                        <i className="fa-solid fa-xmark text-lg"></i>
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-5 space-y-4">
+                    {pwdError && (
+                        <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-xs font-bold flex items-center gap-2">
+                            <i className="fa-solid fa-circle-exclamation"></i> {pwdError}
+                        </div>
+                    )}
+                    {pwdSuccess && (
+                        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 rounded-xl px-4 py-3 text-xs font-bold flex items-center gap-2">
+                            <i className="fa-solid fa-circle-check"></i> {pwdSuccess}
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">كلمة المرور الحالية</label>
+                        <div className="relative">
+                            <input
+                                type={showCurrent ? 'text' : 'password'}
+                                value={pwdForm.current}
+                                onChange={e => setPwdForm(p => ({ ...p, current: e.target.value }))}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 pr-10"
+                                placeholder="••••••••"
+                                required
+                            />
+                            <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <i className={`fa-solid ${showCurrent ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">كلمة المرور الجديدة</label>
+                        <div className="relative">
+                            <input
+                                type={showNew ? 'text' : 'password'}
+                                value={pwdForm.newPwd}
+                                onChange={e => setPwdForm(p => ({ ...p, newPwd: e.target.value }))}
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-sm font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 pr-10"
+                                placeholder="6 أحرف على الأقل"
+                                required
+                            />
+                            <button type="button" onClick={() => setShowNew(v => !v)} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                <i className={`fa-solid ${showNew ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                            </button>
+                        </div>
+                        {pwdForm.newPwd && (
+                            <div className="mt-2 flex gap-1">
+                                {[1,2,3,4].map(i => (
+                                    <div key={i} className={`h-1 flex-1 rounded-full transition-colors ${
+                                        pwdForm.newPwd.length >= i * 3
+                                            ? i <= 1 ? 'bg-red-400' : i <= 2 ? 'bg-amber-400' : i <= 3 ? 'bg-blue-400' : 'bg-emerald-500'
+                                            : 'bg-slate-200 dark:bg-slate-700'
+                                    }`} />
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    <div>
+                        <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">تأكيد كلمة المرور الجديدة</label>
+                        <input
+                            type="password"
+                            value={pwdForm.confirm}
+                            onChange={e => setPwdForm(p => ({ ...p, confirm: e.target.value }))}
+                            className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-2.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500/50 ${
+                                pwdForm.confirm && pwdForm.newPwd !== pwdForm.confirm
+                                    ? 'border-red-300 dark:border-red-700 text-red-700'
+                                    : 'border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                            }`}
+                            placeholder="••••••••"
+                            required
+                        />
+                        {pwdForm.confirm && pwdForm.newPwd !== pwdForm.confirm && (
+                            <p className="text-red-500 text-[10px] mt-1 font-bold">كلمتا المرور غير متطابقتين</p>
+                        )}
+                    </div>
+
+                    <button
+                        type="submit"
+                        disabled={pwdSaving}
+                        className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/30 transition disabled:opacity-60"
+                    >
+                        {pwdSaving ? <><i className="fa-solid fa-spinner fa-spin"></i> جارٍ الحفظ...</> : <><i className="fa-solid fa-lock"></i> تغيير كلمة المرور</>}
+                    </button>
+                </form>
+            </div>
+        </div>
     );
 }
