@@ -432,7 +432,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     const handleSetDeviceType = (deviceType) => {
         setFormData(prev => {
-            const isFull = deviceType === 'جهازين' || deviceType === 'شخصي';
+            const isFull = deviceType === 'شخصي' || deviceType === 'جهازين';
             if (!isFull || !prev.selectedAccount) {
                 return { ...prev, deviceType };
             }
@@ -445,6 +445,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const maxUses = Math.max(1, Number(account?.maxUses || 2));
             const currentUses = Math.max(0, Number(account?.currentUses || 0));
             if (account && (currentUses > 0 || maxUses < 2)) {
+                showToast('تم إلغاء اختيار الحساب لأن الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (جهازين)', 'warning');
                 return { ...prev, deviceType, selectedAccount: '' };
             }
             return { ...prev, deviceType };
@@ -530,12 +531,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return;
             }
             if (!formData.deviceType) {
-                showToast('يرجى اختيار جهاز أو جهازين', 'warning');
+                showToast('يرجى اختيار نوع الاشتراك (شخصي أم مشترك)', 'warning');
                 return;
             }
             const selected = findSelectedAvailableAccount();
-            if (!editingRecord && accountEntryMode === 'available' && selected && formData.deviceType === 'جهازين' && Number(selected.currentUses) > 0) {
-                showToast('الحساب المختار متاح لجهاز واحد فقط', 'warning');
+            const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+            if (!editingRecord && accountEntryMode === 'available' && selected && isPersonalChosen && Number(selected.currentUses) > 0) {
+                showToast('الحساب المختار مستخدم منه جهاز بالفعل، لا يمكن بيعه كاشتراك شخصي (جهازين). يرجى اختيار حساب متاح كامل أو تغيير الاشتراك إلى مشترك.', 'warning');
                 return;
             }
         } else if (currentSheetId === 'account_data') {
@@ -555,13 +557,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             }
         }
 
+        const isPersonalSelection = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
         const cleanPayload = isClientOrMerchant ? {
             email: formData.email,
             password: formData.password,
             password2: formData.password2 || 'Service2030@',
             duration: formData.duration,
             startDate: formData.startDate || '',
-            deviceType: formData.deviceType || 'جهاز',
+            deviceType: isPersonalSelection ? 'شخصي' : 'مشترك',
+            accountUsageMode: isPersonalSelection ? 'personal' : 'shared_one_device',
+            saleType: isPersonalSelection ? 'personal' : 'shared_one_device',
             paymentStatus: formData.paymentStatus || 'مدفوع',
             selectedAccount: formData.selectedAccount || '',
             notes: formData.notes,
@@ -651,9 +656,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
             };
-            if (currentSheetId === 'client_data' && accountEntryMode === 'available') {
+            if ((currentSheetId === 'client_data' || currentSheetId === 'merchant_data') && accountEntryMode === 'available') {
                 const selectedAcc = findSelectedAvailableAccount();
-                await sellCloudAccount(newRecord, selectedAcc?.id);
+                await sellCloudAccount(newRecord, selectedAcc?.id, currentSheetId);
             } else if (!await saveRecords([newRecord, ...records])) return;
             showToast('تم إضافة السجل الجديد بنجاح ✓', 'success');
         }
@@ -1305,10 +1310,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             });
         }
 
-        // Advanced filters: deviceType filter
+        // Advanced filters: deviceType filter (شخصي أم مشترك)
         if (deviceFilter !== 'all' && isClientOrMerchant) {
             result = result.filter(r => {
-                return String(r.deviceType || 'جهاز') === deviceFilter;
+                const dev = String(r.deviceType || '').trim();
+                if (deviceFilter === 'شخصي') {
+                    return dev === 'شخصي' || dev === 'جهازين';
+                }
+                if (deviceFilter === 'مشترك') {
+                    return dev === 'مشترك' || dev === 'جهاز' || dev === '' || (!r.deviceType);
+                }
+                return dev === deviceFilter;
             });
         }
 
@@ -1918,14 +1930,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             {/* Device Type Filter */}
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
-                                    <i className="fa-solid fa-desktop text-blue-500"></i>
-                                    نوع الجهاز
+                                    <i className="fa-solid fa-users-gear text-blue-500"></i>
+                                    نوع الاشتراك
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {[
                                         { id: 'all', label: 'الكل' },
-                                        { id: 'جهاز', label: '💻 جهاز واحد' },
-                                        { id: 'جهازين', label: '🖥️ جهازين' },
+                                        { id: 'شخصي', label: '🛡️ شخصي' },
+                                        { id: 'مشترك', label: '💻 مشترك' },
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -2548,20 +2560,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     </td>
                                                     {/* Device Type (نوع الاشتراك: شخصي أم مشترك) */}
                                                     <td className="px-1.5 py-1 font-medium">
-                                                        {rec.deviceType === 'شخصي' ? (
+                                                        {(rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين') ? (
                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs whitespace-nowrap">
                                                                 <i className="fa-solid fa-user-shield text-[8px]"></i>
                                                                 <span>شخصي</span>
                                                             </span>
-                                                        ) : rec.deviceType === 'جهازين' ? (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/70 dark:border-blue-800/60 shadow-xs whitespace-nowrap">
-                                                                <i className="fa-solid fa-network-wired text-[8px]"></i>
-                                                                <span>مشترك (جهازين)</span>
-                                                            </span>
                                                         ) : (
                                                             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/60 shadow-xs whitespace-nowrap">
                                                                 <i className="fa-solid fa-laptop text-[8px]"></i>
-                                                                <span>مشترك (جهاز)</span>
+                                                                <span>مشترك</span>
                                                             </span>
                                                         )}
                                                     </td>
@@ -3020,16 +3027,25 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     const currentUses = Math.max(0, Number(acc.currentUses || 0));
                                                     const remaining = Math.max(0, maxUses - currentUses);
                                                     const accountEmail = acc.email || acc.selectedAccount || '';
-                                                    const statusText = currentUses === 0 ? `متاح كامل - باقي ${remaining}` : `مشترك - باقي ${remaining}`;
+                                                    const isFull = currentUses === 0;
+                                                    const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+                                                    const disabledForPersonal = isPersonalChosen && !isFull;
+                                                    const statusText = isFull ? `متاح بالكامل (جهازين)` : `مشترك (متبقي جهاز 1)`;
                                                     return (
-                                                        <option key={acc.id} value={accountEmail || acc.id}>
-                                                            {(accountEmail || 'حساب بدون ميل')} - {statusText}
+                                                        <option
+                                                            key={acc.id}
+                                                            value={accountEmail || acc.id}
+                                                            disabled={disabledForPersonal}
+                                                        >
+                                                            {(accountEmail || 'حساب بدون ميل')} - {statusText} {disabledForPersonal ? '⚠️ (غير صالح للشخصي)' : ''}
                                                         </option>
                                                     );
                                                 })}
                                             </select>
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                القائمة تعرض فقط الحسابات غير المكتملة: حساب متاح بالكامل أو حساب مشترك باقي فيه جهاز.
+                                                {formData.deviceType === 'شخصي'
+                                                    ? '🟢 الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (الجهازين معاً لم يتم استخدام أي منهما).'
+                                                    : '🟣 الاشتراك المشترك يمكن تسكينه على حساب متاح بالكامل أو حساب مشترك متبقي فيه جهاز.'}
                                             </p>
                                         </div>
                                     ) : (
@@ -3336,59 +3352,51 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                 {/* نوع الاشتراك: شخصي أم مشترك */}
                                 <div className="space-y-1.5 pt-1">
-                                    <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                        نوع الاشتراك (شخصي أم مشترك)
-                                    </label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                                            نوع الاشتراك (شخصي أم مشترك)
+                                        </label>
+                                        <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                                            formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين'
+                                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                                : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300'
+                                        }`}>
+                                            {formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين' ? '🟢 شخصي — يخصم الجهازين' : '🟣 مشترك — يخصم جهاز واحد'}
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2.5">
                                         {/* شخصي */}
                                         <button
                                             type="button"
                                             onClick={() => handleSetDeviceType('شخصي')}
-                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'شخصي'
+                                            className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
+                                                formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين'
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
-                                                <i className="fa-solid fa-user-shield text-sm text-emerald-500"></i>
-                                                <span className="text-xs font-black">شخصي</span>
+                                                <i className="fa-solid fa-user-shield text-base text-emerald-500"></i>
+                                                <span className="text-sm font-black">شخصي</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400 font-normal">حساب كامل</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">الجهازين للعميل (2 slots)</span>
                                         </button>
 
-                                        {/* مشترك - جهاز واحد */}
+                                        {/* مشترك */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('جهاز')}
-                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'جهاز' || (!formData.deviceType)
+                                            onClick={() => handleSetDeviceType('مشترك')}
+                                            className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
+                                                formData.deviceType === 'مشترك' || formData.deviceType === 'جهاز' || (!formData.deviceType)
                                                     ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-sm ring-2 ring-purple-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
-                                                <i className="fa-solid fa-laptop text-sm text-purple-500"></i>
-                                                <span className="text-xs font-black">مشترك (جهاز واحد)</span>
+                                                <i className="fa-solid fa-laptop text-base text-purple-500"></i>
+                                                <span className="text-sm font-black">مشترك</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-400 font-normal">جهاز واحد</span>
-                                        </button>
-
-                                        {/* مشترك - جهازين */}
-                                        <button
-                                            type="button"
-                                            onClick={() => handleSetDeviceType('جهازين')}
-                                            className={`py-2.5 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition select-none cursor-pointer ${
-                                                formData.deviceType === 'جهازين'
-                                                    ? 'border-blue-500 bg-blue-500/10 text-blue-600 dark:text-blue-400 shadow-sm ring-2 ring-blue-500/20'
-                                                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-1.5">
-                                                <i className="fa-solid fa-network-wired text-sm text-blue-500"></i>
-                                                <span className="text-xs font-black">مشترك (جهازين)</span>
-                                            </div>
-                                            <span className="text-[10px] text-slate-400 font-normal">الجهازين معاً</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">جهاز واحد للعميل (1 slot)</span>
                                         </button>
                                     </div>
                                 </div>

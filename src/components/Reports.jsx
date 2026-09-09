@@ -118,7 +118,7 @@ export default function Reports() {
         let totalPaid = 0;
         let totalUnpaid = 0;
         const durationMap = {};
-        const deviceMap = { 'جهاز': 0, 'جهازين': 0, 'أخرى': 0 };
+        const deviceMap = { 'شخصي': 0, 'مشترك': 0, 'أخرى': 0 };
         const urgentRenewals = [];
 
         allClientRecords.forEach(r => {
@@ -148,8 +148,8 @@ export default function Reports() {
 
             // Device stats
             const dev = String(r.deviceType || '').trim();
-            if (dev === 'جهاز') deviceMap['جهاز']++;
-            else if (dev === 'جهازين') deviceMap['جهازين']++;
+            if (dev === 'شخصي' || dev === 'جهازين') deviceMap['شخصي']++;
+            else if (dev === 'مشترك' || dev === 'جهاز' || !dev) deviceMap['مشترك']++;
             else deviceMap['أخرى']++;
         });
 
@@ -287,10 +287,10 @@ export default function Reports() {
     // Adobe Devices Chart Data
     const deviceChartData = useMemo(() => {
         return {
-            labels: ['💻 جهاز واحد', '🖥️ جهازين', '📱 أخرى'],
+            labels: ['🛡️ شخصي (جهازين)', '💻 مشترك (جهاز)', '📱 أخرى'],
             datasets: [{
-                data: [adobeStats.deviceMap['جهاز'], adobeStats.deviceMap['جهازين'], adobeStats.deviceMap['أخرى']],
-                backgroundColor: ['#3b82f6', '#8b5cf6', '#94a3b8'],
+                data: [adobeStats.deviceMap['شخصي'], adobeStats.deviceMap['مشترك'], adobeStats.deviceMap['أخرى']],
+                backgroundColor: ['#10b981', '#a855f7', '#94a3b8'],
                 borderWidth: 2,
                 borderColor: '#ffffff'
             }]

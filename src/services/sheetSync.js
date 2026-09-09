@@ -32,52 +32,47 @@ export async function writeCloudSheet(sheetId, records) {
     if (channel) await channel.send({ type: 'broadcast', event: 'changed', payload: {} });
 }
 
-export async function sellCloudAccount(record, accountId) {
+export async function sellCloudAccount(record, accountId, targetSheetId = 'client_data') {
     if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
     status('saving');
 
-    // 1. Fetch current client_data and account_data rows
+    // 1. Fetch current target sheet and account_data rows
     const { data: sheetsData, error: readError } = await supabase
         .from('custom_sheets_data')
         .select('*')
-        .in('sheet_id', ['client_data', 'account_data']);
+        .in('sheet_id', [targetSheetId, 'account_data']);
 
     if (readError) {
         status('error');
         throw readError;
     }
 
-    const clientRow = sheetsData?.find(r => r.sheet_id === 'client_data');
+    const targetRow = sheetsData?.find(r => r.sheet_id === targetSheetId);
     const accountRow = sheetsData?.find(r => r.sheet_id === 'account_data');
 
-    const clientRecords = Array.isArray(clientRow?.records) ? clientRow.records : [];
+    const targetRecords = Array.isArray(targetRow?.records) ? targetRow.records : [];
     const accountRecords = Array.isArray(accountRow?.records) ? accountRow.records : [];
 
-    // 2. Prepend new record to client_data
+    // 2. Prepend new record to target sheet
     const newRecord = {
         ...record,
         id: record.id || ('REC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 7)),
         created_at: record.created_at || new Date().toISOString(),
         updated_at: new Date().toISOString()
     };
-    const updatedClientRecords = [newRecord, ...clientRecords.filter(r => r.id !== newRecord.id)];
+    const updatedTargetRecords = [newRecord, ...targetRecords.filter(r => r.id !== newRecord.id)];
 
     // 3. If accountId provided, update account usage in account_data
     let updatedAccountRecords = accountRecords;
     if (accountId) {
-        // القاعدة الصحيحة:
-        // شخصي = 2 slots (الحساب كله لشخص واحد)
-        // مشترك جهاز واحد = 1 slot (ممكن يتباع مرتين)
-        // مشترك جهازين = 2 slots (نفس الحساب كله)
-        const saleMode = record.accountUsageMode || record.saleType || 'shared_one_device';
-        let delta;
-        if (saleMode === 'personal') {
-            delta = 2; // شخصي = الحساب كله
-        } else if (saleMode === 'shared_two_devices') {
-            delta = 2; // مشترك جهازين = نفس الحساب كله
-        } else {
-            delta = 1; // مشترك جهاز واحد = نصف الحساب
-        }
+        // القاعدة الصارمة:
+        // شخصي = 2 slots (الحساب كامل للجهازين لنفس الشخص)
+        // مشترك = 1 slot (جهاز واحد فقط)
+        const isPersonal = record.accountUsageMode === 'personal'
+            || record.saleType === 'personal'
+            || record.deviceType === 'شخصي'
+            || record.deviceType === 'جهازين';
+        const delta = isPersonal ? 2 : 1;
 
         updatedAccountRecords = accountRecords.map(acc => {
             if (String(acc.id) !== String(accountId)) return acc;
@@ -86,7 +81,7 @@ export async function sellCloudAccount(record, accountId) {
             const accountUsageStatus = currentUses <= 0
                 ? 'available'
                 : currentUses >= maxUses
-                ? (saleMode === 'personal' ? 'personal_full' : 'shared_full')
+                ? (isPersonal ? 'personal_full' : 'shared_full')
                 : 'shared_one_device';
 
             return {
@@ -101,7 +96,7 @@ export async function sellCloudAccount(record, accountId) {
 
     // 4. Save both sheets to Supabase
     const upsertRows = [
-        { sheet_id: 'client_data', records: updatedClientRecords, updated_at: new Date().toISOString() }
+        { sheet_id: targetSheetId, records: updatedTargetRecords, updated_at: new Date().toISOString() }
     ];
     if (accountId) {
         upsertRows.push({
