@@ -36,7 +36,9 @@ export default function Sales() {
     const [selectedCustomerId, setSelectedCustomerId] = useState('');
     const [sheetAccounts, setSheetAccounts] = useState([]);
     const [selectedSheetAccountId, setSelectedSheetAccountId] = useState('');
-    const [accountUsageMode, setAccountUsageMode] = useState('shared_one_device');
+    const [accountUsageMode, setAccountUsageMode] = useState('personal');
+    const [salePlanType, setSalePlanType] = useState('personal'); // 'personal' | 'shared_one_device' | 'shared_two_devices' | 'workspace'
+    const [saleDuration, setSaleDuration] = useState(30); // days (30 days = 1 month)
     const [contactChannel, setContactChannel] = useState('واتساب');
     const [customerSearch, setCustomerSearch] = useState('');
     const formRef = useRef(null);
@@ -129,10 +131,20 @@ export default function Sales() {
 
     const handleSelectSheetAccount = (accountId) => {
         setSelectedSheetAccountId(accountId);
-        setAccountUsageMode('shared_one_device');
         const account = sheetAccounts.find(item => String(item.id) === String(accountId));
-        if (!account || !formRef.current) return;
+        if (!account) return;
 
+        const currentUses = Math.max(0, Number(account.currentUses || 0));
+        const maxUses = Math.max(1, Number(account.maxUses || 2));
+        if (currentUses > 0 || maxUses < 2) {
+            setSalePlanType('shared_one_device');
+            setAccountUsageMode('shared_one_device');
+        } else {
+            setSalePlanType('personal');
+            setAccountUsageMode('personal');
+        }
+
+        if (!formRef.current) return;
         const emailInput = formRef.current.querySelector('[name="customerEmail"]');
         const passwordInput = formRef.current.querySelector('[name="customerPassword"]');
         const notesInput = formRef.current.querySelector('[name="notes"]');
@@ -218,6 +230,8 @@ export default function Sales() {
             const matchProduct = productFilters.length === 0 || productFilters.includes(s.productName);
             const matchStatus = statusFilter === 'all'
                 ? true
+                : statusFilter === 'personal' ? (s.saleType === 'personal' || (!s.saleType && !s.notes?.includes('مشترك') && !s.notes?.includes('shared')))
+                : statusFilter === 'shared' ? (s.saleType === 'shared_one_device' || s.saleType === 'shared_two_devices' || s.saleType === 'shared' || s.notes?.includes('مشترك') || s.notes?.includes('shared'))
                 : statusFilter === 'paid' ? s.isPaid
                 : statusFilter === 'unpaid' ? !s.isPaid
                 : statusFilter === 'activated' ? s.isActivated
@@ -283,8 +297,9 @@ export default function Sales() {
         // اسم المحفظة
         const wallet = walletId ? wallets.find(w => String(w.id) === String(walletId)) : null;
 
-        // مدة الاشتراك من المنتج
-        const productDuration = product ? (product.duration || 30) : 30;
+        // مدة الاشتراك - الشهر = 30 يوم
+        const durationInput = Number(formData.get('duration')) || saleDuration || (product ? product.duration : 30) || 30;
+        const productDuration = Math.max(1, durationInput);
         
         // تاريخ البيع - لو المستخدم اختار تاريخ قديم يستخدمه، غير كده تاريخ اليوم
         const customDateStr = formData.get('saleDate');
@@ -307,7 +322,7 @@ export default function Sales() {
         const selectedSheetAccount = selectedSheetAccountId
             ? sheetAccounts.find(item => String(item.id) === String(selectedSheetAccountId))
             : null;
-        const selectedAccountUsageMode = selectedSheetAccount ? accountUsageMode : 'shared_one_device';
+        const selectedAccountUsageMode = selectedSheetAccount ? salePlanType : 'personal';
 
         // Save/update customer record
         let customerId = selectedCustomerId;
@@ -347,11 +362,19 @@ export default function Sales() {
                 fromInventory: false,
                 assignedAccountEmail: '',
                 assignedAccountId: null,
-                saleType: saleType,
-                workspaceEmail: saleType === 'workspace' ? workspaceEmail : '',
+                saleType: salePlanType,
+                workspaceEmail: salePlanType === 'workspace' ? workspaceEmail : '',
                 isActivated: false,
                 customerPassword: formData.get('customerPassword')?.trim() || '',
             };
+
+            const planText = salePlanType === 'personal'
+                ? 'نوع الحساب: شخصي (حساب كامل)'
+                : salePlanType === 'shared_one_device'
+                ? 'نوع الحساب: مشترك (جهاز واحد)'
+                : salePlanType === 'shared_two_devices'
+                ? 'نوع الحساب: مشترك (جهازين)'
+                : `نوع الحساب: Workspace (${workspaceEmail || ''})`;
 
             if (selectedSheetAccount) {
                 data.fromInventory = true;
@@ -362,10 +385,10 @@ export default function Sales() {
                 data.notes = [
                     data.notes,
                     selectedSheetAccount.selectedAccount ? `بيانات الحساب: ${selectedSheetAccount.selectedAccount}` : '',
-                    selectedAccountUsageMode === 'personal' ? 'نوع الحساب: شخصي | account_usage:personal' : '',
-                    selectedAccountUsageMode === 'shared_one_device' ? 'نوع الحساب: مشترك - خرج جهاز واحد | account_usage:shared_one_device' : '',
-                    selectedAccountUsageMode === 'shared_two_devices' ? 'نوع الحساب: مشترك - خرج الجهازين | account_usage:shared_two_devices' : '',
+                    planText
                 ].filter(Boolean).join(' | ');
+            } else if (!data.notes.includes('نوع الحساب:')) {
+                data.notes = [data.notes, planText].filter(Boolean).join(' | ');
             }
 
             if (editingSale) {
@@ -659,8 +682,26 @@ export default function Sales() {
         XLSX.writeFile(wb, `ServiceHub_Sales_${new Date().toISOString().split('T')[0]}.xlsx`);
     };
 
-    const openAddSale = () => { setEditingSale(null); setShowSaleModal(true); };
-    const openEditSale = (sale) => { setEditingSale(sale); setShowSaleModal(true); };
+    const openAddSale = () => {
+        setEditingSale(null);
+        setSelectedSheetAccountId('');
+        setSalePlanType('personal');
+        setAccountUsageMode('personal');
+        setSaleType('personal');
+        setSaleDuration(30);
+        setWorkspaceEmail('');
+        setShowSaleModal(true);
+    };
+    const openEditSale = (sale) => {
+        setEditingSale(sale);
+        setSaleDuration(Number(sale.duration) || 30);
+        const plan = sale.saleType || (sale.notes?.includes('shared_two_devices') || sale.notes?.includes('الجهازين') ? 'shared_two_devices' : (sale.notes?.includes('shared') || sale.notes?.includes('مشترك')) ? 'shared_one_device' : 'personal');
+        setSalePlanType(plan);
+        setAccountUsageMode(plan);
+        setSaleType(plan === 'workspace' ? 'workspace' : 'personal');
+        setWorkspaceEmail(sale.workspaceEmail || '');
+        setShowSaleModal(true);
+    };
 
     // ========= Render =========
     return (
@@ -706,7 +747,7 @@ export default function Sales() {
                     {/* Filters */}
                     <div className="flex flex-wrap gap-3 items-center">
                         <div className="flex bg-white p-1.5 rounded-xl border border-slate-200 shadow-sm flex-wrap">
-                            {[{ id: 'all', label: 'الكل' }, { id: 'paid', label: 'مدفوع' }, { id: 'unpaid', label: 'غير مدفوع' }, { id: 'activated', label: 'مفعّل' }, { id: 'notActivated', label: 'غير مفعّل' }, { id: 'hasDiscount', label: 'خصومات' }, { id: 'duplicates', label: `مكرر (${duplicateEmails.size})` }].map(f => (
+                            {[{ id: 'all', label: 'الكل' }, { id: 'personal', label: 'شخصي' }, { id: 'shared', label: 'مشترك' }, { id: 'paid', label: 'مدفوع' }, { id: 'unpaid', label: 'غير مدفوع' }, { id: 'activated', label: 'مفعّل' }, { id: 'notActivated', label: 'غير مفعّل' }, { id: 'hasDiscount', label: 'خصومات' }, { id: 'duplicates', label: `مكرر (${duplicateEmails.size})` }].map(f => (
                                 <button key={f.id} onClick={() => setStatusFilter(f.id)} className={`px-3 md:px-4 py-2 rounded-lg text-xs md:text-sm font-bold transition-all ${statusFilter === f.id ? (f.id === 'duplicates' ? 'bg-red-600 text-white shadow-md' : 'bg-indigo-600 text-white shadow-md') : 'text-slate-500 hover:bg-slate-50'}`}>{f.label}</button>
                             ))}
                         </div>
@@ -788,10 +829,36 @@ export default function Sales() {
                                         {/* Row 3: Info chips */}
                                         <div className="flex flex-wrap gap-1 mb-2.5">
                                             <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fa-solid fa-box text-[8px]"></i>{sale.productName}</span>
+                                            {/* نوع الاشتراك: شخصي أو مشترك */}
+                                            {sale.saleType === 'personal' && (
+                                                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                    <i className="fa-solid fa-user-shield text-[8px]"></i> شخصي
+                                                </span>
+                                            )}
+                                            {(sale.saleType === 'shared_one_device' || sale.saleType === 'shared') && (
+                                                <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                    <i className="fa-solid fa-laptop text-[8px]"></i> مشترك (جهاز)
+                                                </span>
+                                            )}
+                                            {sale.saleType === 'shared_two_devices' && (
+                                                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                    <i className="fa-solid fa-network-wired text-[8px]"></i> مشترك (جهازين)
+                                                </span>
+                                            )}
+                                            {sale.saleType === 'workspace' && (
+                                                <span className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold">
+                                                    <i className="fa-solid fa-users text-[8px]"></i> Workspace
+                                                </span>
+                                            )}
                                             <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 px-2 py-0.5 rounded text-[10px] font-bold"><i className={`fa-brands text-[8px] ${sale.contactChannel === 'واتساب' ? 'fa-whatsapp text-green-600' : sale.contactChannel === 'ماسنجر' ? 'fa-facebook-messenger text-blue-600' : 'fa-telegram text-sky-500'}`}></i>{sale.contactChannel}</span>
                                             {sale.paymentMethod && <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fa-solid fa-wallet text-[8px]"></i>{sale.paymentMethod}</span>}
                                             {sale.fromInventory && sale.assignedAccountEmail && <button onClick={() => showAccountDetails(sale)} className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold hover:bg-purple-100 transition"><i className="fa-solid fa-server text-[8px]"></i>{sale.assignedAccountEmail}</button>}
-                                            {sale.duration && <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fa-solid fa-hourglass-half text-[8px]"></i>{sale.duration}ي</span>}
+                                            {sale.duration && (
+                                                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold" title={`المدة: ${sale.duration} يوم (الشهر = 30 يوم)`}>
+                                                    <i className="fa-solid fa-hourglass-half text-[8px]"></i>
+                                                    {sale.duration === 30 ? '1 شهر (30ي)' : sale.duration === 60 ? '2 شهر (60ي)' : sale.duration === 90 ? '3 شهور (90ي)' : sale.duration === 180 ? '6 شهور (180ي)' : sale.duration === 365 ? '1 سنة (365ي)' : `${sale.duration}ي`}
+                                                </span>
+                                            )}
                                             {daysLeft !== null && <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ${isExpired ? 'bg-red-100 text-red-700' : isSoon ? 'bg-orange-100 text-orange-700' : 'bg-teal-50 text-teal-700'}`}><i className={`fa-solid text-[8px] ${isExpired ? 'fa-triangle-exclamation' : 'fa-clock'}`}></i>{isExpired ? `منتهي ${Math.abs(daysLeft)}ي` : `${daysLeft}ي`}</span>}
                                             {sale.saleType === 'workspace' && sale.workspaceEmail && <span className="inline-flex items-center gap-1 bg-cyan-50 text-cyan-700 px-2 py-0.5 rounded text-[10px] font-bold"><i className="fa-solid fa-users text-[8px]"></i>{sale.workspaceEmail}</span>}
                                         </div>
@@ -851,7 +918,16 @@ export default function Sales() {
                                             <i className="fa-solid fa-triangle-exclamation"></i> لا يوجد منتجات. اطلب من الأدمن إضافة المنتجات أولاً.
                                         </div>
                                     ) : (
-                                        <select name="productName" defaultValue={editingSale?.productName || ""} className="w-full bg-white border-2 border-slate-200 rounded-xl p-3.5 font-bold text-sm focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all appearance-none" required>
+                                        <select
+                                            name="productName"
+                                            defaultValue={editingSale?.productName || ""}
+                                            onChange={(e) => {
+                                                const p = products.find(prod => prod.name === e.target.value);
+                                                if (p?.duration) setSaleDuration(Number(p.duration));
+                                            }}
+                                            className="w-full bg-white border-2 border-slate-200 rounded-xl p-3.5 font-bold text-sm focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all appearance-none"
+                                            required
+                                        >
                                             <option value="" disabled>-- اختر المنتج --</option>
                                             {products.map(p => {
                                                 let isOut = false;
@@ -873,6 +949,254 @@ export default function Sales() {
                                             })}
                                         </select>
                                     )}
+                                </div>
+
+                                {/* مدة الاشتراك (الشهر = 30 يوم) */}
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
+                                            <i className="fa-solid fa-hourglass-half text-indigo-500"></i>
+                                            مدة الاشتراك (الشهر = 30 يوم)
+                                        </div>
+                                        <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg font-mono dir-ltr">
+                                            {saleDuration} يوم ({Math.round((saleDuration / 30) * 10) / 10} شهر)
+                                        </span>
+                                    </div>
+
+                                    {/* أزرار سريعة لاختيار المدة */}
+                                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                        {[
+                                            { label: '1 شهر', days: 30 },
+                                            { label: '2 شهر', days: 60 },
+                                            { label: '3 شهور', days: 90 },
+                                            { label: '6 شهور', days: 180 },
+                                            { label: '1 سنة', days: 365 },
+                                        ].map(item => (
+                                            <button
+                                                key={item.days}
+                                                type="button"
+                                                onClick={() => setSaleDuration(item.days)}
+                                                className={`py-2.5 px-2 rounded-xl border-2 font-bold text-xs transition-all flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                                                    saleDuration === item.days
+                                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700 shadow-sm ring-2 ring-indigo-200'
+                                                        : 'border-slate-200 text-slate-600 hover:border-indigo-300 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                <span className="font-extrabold">{item.label}</span>
+                                                <span className="text-[10px] text-slate-400 font-mono">({item.days} يوم)</span>
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* إدخال عدد الأيام يدوياً مع عرض تاريخ الانتهاء */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                                عدد الأيام بالأيام (يمكنك تعديلها يدوياً)
+                                            </label>
+                                            <input
+                                                name="duration"
+                                                type="number"
+                                                min="1"
+                                                value={saleDuration}
+                                                onChange={(e) => setSaleDuration(Math.max(1, Number(e.target.value) || 1))}
+                                                className="w-full bg-white border-2 border-slate-200 rounded-xl p-3 font-bold text-sm focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all font-mono"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                                                تاريخ انتهاء الاشتراك المحسوب
+                                            </label>
+                                            <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-3 text-xs font-bold text-indigo-700 flex items-center justify-between">
+                                                <span className="flex items-center gap-1.5">
+                                                    <i className="fa-regular fa-calendar-check text-indigo-500"></i>
+                                                    {(() => {
+                                                        const baseDate = editingSale?.date ? new Date(editingSale.date) : new Date();
+                                                        const exp = new Date(baseDate.getTime() + saleDuration * 86400000);
+                                                        return exp.toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' });
+                                                    })()}
+                                                </span>
+                                                <span className="text-[10px] text-slate-400 font-mono dir-ltr">
+                                                    {(() => {
+                                                        const baseDate = editingSale?.date ? new Date(editingSale.date) : new Date();
+                                                        const exp = new Date(baseDate.getTime() + saleDuration * 86400000);
+                                                        return exp.toISOString().slice(0, 10);
+                                                    })()}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* نوع الحساب والاشتراك: شخصي أم مشترك */}
+                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div className="text-xs font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1.5">
+                                            <i className="fa-solid fa-users-gear text-indigo-500"></i>
+                                            نوع الحساب (شخصي أم مشترك)
+                                        </div>
+                                        <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full ${
+                                            salePlanType === 'personal'
+                                                ? 'bg-emerald-100 text-emerald-800'
+                                                : salePlanType === 'shared_one_device'
+                                                ? 'bg-purple-100 text-purple-800'
+                                                : salePlanType === 'shared_two_devices'
+                                                ? 'bg-blue-100 text-blue-800'
+                                                : 'bg-cyan-100 text-cyan-800'
+                                        }`}>
+                                            {salePlanType === 'personal' ? 'شخصي (حساب كامل)' : salePlanType === 'shared_one_device' ? 'مشترك (جهاز واحد)' : salePlanType === 'shared_two_devices' ? 'مشترك (جهازين)' : 'Workspace'}
+                                        </span>
+                                    </div>
+
+                                    {(() => {
+                                        const sheetAcc = selectedSheetAccountId ? sheetAccounts.find(item => String(item.id) === String(selectedSheetAccountId)) : null;
+                                        const isSingleOnly = sheetAcc ? (Number(sheetAcc.currentUses || 0) > 0 || Number(sheetAcc.maxUses || 2) < 2) : false;
+                                        return (
+                                            <div className="space-y-3">
+                                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                                    {/* شخصي */}
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSingleOnly}
+                                                        onClick={() => {
+                                                            setSalePlanType('personal');
+                                                            setAccountUsageMode('personal');
+                                                            setSaleType('personal');
+                                                        }}
+                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
+                                                            isSingleOnly
+                                                                ? 'opacity-40 cursor-not-allowed border-slate-200 bg-slate-50'
+                                                                : salePlanType === 'personal'
+                                                                ? 'border-emerald-500 bg-emerald-50/70 shadow-md ring-2 ring-emerald-200'
+                                                                : 'border-slate-200 hover:border-emerald-300 hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
+                                                            salePlanType === 'personal' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            <i className="fa-solid fa-user-shield"></i>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-sm font-black text-slate-800 block">شخصي</span>
+                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">حساب كامل للعميل</span>
+                                                        </div>
+                                                        {salePlanType === 'personal' && (
+                                                            <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px]">
+                                                                <i className="fa-solid fa-check"></i>
+                                                            </span>
+                                                        )}
+                                                    </button>
+
+                                                    {/* مشترك - جهاز واحد */}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSalePlanType('shared_one_device');
+                                                            setAccountUsageMode('shared_one_device');
+                                                            setSaleType('personal');
+                                                        }}
+                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
+                                                            salePlanType === 'shared_one_device'
+                                                                ? 'border-purple-500 bg-purple-50/70 shadow-md ring-2 ring-purple-200'
+                                                                : 'border-slate-200 hover:border-purple-300 hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
+                                                            salePlanType === 'shared_one_device' ? 'bg-purple-600 text-white' : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            <i className="fa-solid fa-laptop"></i>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-sm font-black text-slate-800 block">مشترك (جهاز واحد)</span>
+                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">تسجيل خروج جهاز واحد</span>
+                                                        </div>
+                                                        {salePlanType === 'shared_one_device' && (
+                                                            <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center text-[10px]">
+                                                                <i className="fa-solid fa-check"></i>
+                                                            </span>
+                                                        )}
+                                                    </button>
+
+                                                    {/* مشترك - جهازين */}
+                                                    <button
+                                                        type="button"
+                                                        disabled={isSingleOnly}
+                                                        onClick={() => {
+                                                            setSalePlanType('shared_two_devices');
+                                                            setAccountUsageMode('shared_two_devices');
+                                                            setSaleType('personal');
+                                                        }}
+                                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center text-center gap-2 relative cursor-pointer ${
+                                                            isSingleOnly
+                                                                ? 'opacity-40 cursor-not-allowed border-slate-200 bg-slate-50'
+                                                                : salePlanType === 'shared_two_devices'
+                                                                ? 'border-blue-500 bg-blue-50/70 shadow-md ring-2 ring-blue-200'
+                                                                : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'
+                                                        }`}
+                                                    >
+                                                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-lg ${
+                                                            salePlanType === 'shared_two_devices' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500'
+                                                        }`}>
+                                                            <i className="fa-solid fa-network-wired"></i>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-sm font-black text-slate-800 block">مشترك (جهازين)</span>
+                                                            <span className="text-[11px] text-slate-500 font-bold block mt-0.5">تسجيل خروج الجهازين</span>
+                                                        </div>
+                                                        {salePlanType === 'shared_two_devices' && (
+                                                            <span className="absolute top-2.5 left-2.5 w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px]">
+                                                                <i className="fa-solid fa-check"></i>
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                </div>
+
+                                                {isSingleOnly && (
+                                                    <div className="bg-amber-50 text-amber-800 p-2.5 rounded-xl border border-amber-200 text-xs font-bold flex items-center gap-2">
+                                                        <i className="fa-solid fa-circle-info text-amber-500"></i>
+                                                        الحساب المختار في بيانات الحساب به جهاز مستخدم بالفعل، لذلك متاح لجهاز واحد فقط.
+                                                    </div>
+                                                )}
+
+                                                {/* خيار إضافي: Workspace */}
+                                                <div className="pt-2 border-t border-slate-100">
+                                                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={salePlanType === 'workspace'}
+                                                            onChange={(e) => {
+                                                                if (e.target.checked) {
+                                                                    setSalePlanType('workspace');
+                                                                    setSaleType('workspace');
+                                                                } else {
+                                                                    setSalePlanType('personal');
+                                                                    setSaleType('personal');
+                                                                    setWorkspaceEmail('');
+                                                                }
+                                                            }}
+                                                            className="w-4 h-4 rounded text-cyan-600 focus:ring-cyan-500 border-slate-300"
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-700">هذا البيع اشتراك Workspace (مجموعة عمل)</span>
+                                                    </label>
+
+                                                    {salePlanType === 'workspace' && (
+                                                        <div className="mt-3 animate-fade-in">
+                                                            <label className="block text-xs font-bold text-slate-700 mb-1.5">إيميل الـ Workspace <span className="text-red-500">*</span></label>
+                                                            <input
+                                                                type="email"
+                                                                value={workspaceEmail}
+                                                                onChange={e => setWorkspaceEmail(e.target.value)}
+                                                                placeholder="workspace@example.com"
+                                                                className="w-full bg-white border-2 border-cyan-300 rounded-xl p-3 font-bold text-sm focus:ring-4 focus:ring-cyan-100 focus:border-cyan-600 outline-none transition-all font-mono"
+                                                                required={salePlanType === 'workspace'}
+                                                            />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* بيانات العميل */}
@@ -918,58 +1242,6 @@ export default function Sales() {
                                         <p className="text-[11px] text-purple-700/70 font-bold">
                                             عند الاختيار يتم ملء إيميل العميل وباسورد العميل تلقائيا، ويتسجل الحساب مربوطا بالبيعة.
                                         </p>
-                                        {selectedSheetAccountId && (() => {
-                                            const account = sheetAccounts.find(item => String(item.id) === String(selectedSheetAccountId));
-                                            const currentUses = Math.max(0, Number(account?.currentUses || 0));
-                                            const maxUses = Math.max(1, Number(account?.maxUses || 2));
-                                            const canTakeFullAccount = currentUses === 0 && maxUses >= 2;
-                                            return (
-                                                <div className="space-y-2 pt-2">
-                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                        <label className={`flex items-center gap-2 bg-white border-2 rounded-xl px-3 py-2 transition ${canTakeFullAccount ? 'border-slate-900 cursor-pointer hover:border-slate-700' : 'border-slate-100 opacity-50 cursor-not-allowed'}`}>
-                                                            <input
-                                                                type="radio"
-                                                                name="accountUsageMode"
-                                                                value="personal"
-                                                                checked={accountUsageMode === 'personal'}
-                                                                onChange={() => setAccountUsageMode('personal')}
-                                                                disabled={!canTakeFullAccount && accountUsageMode !== 'personal'}
-                                                                className="accent-slate-900"
-                                                            />
-                                                            <span className="text-xs font-black text-slate-700">شخصي - الحساب كامل</span>
-                                                        </label>
-                                                        <div className="rounded-xl border-2 border-purple-100 bg-purple-50/60 px-3 py-2">
-                                                            <div className="text-[11px] font-black text-purple-800 mb-1">مشترك</div>
-                                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                                    <label className="flex items-center gap-2 bg-white border-2 border-purple-100 rounded-xl px-3 py-2 cursor-pointer hover:border-purple-300 transition">
-                                                        <input
-                                                            type="radio"
-                                                            name="accountUsageMode"
-                                                            value="shared_one_device"
-                                                            checked={accountUsageMode === 'shared_one_device'}
-                                                            onChange={() => setAccountUsageMode('shared_one_device')}
-                                                            className="accent-purple-600"
-                                                        />
-                                                        <span className="text-xs font-black text-slate-700">خرج جهاز</span>
-                                                    </label>
-                                                    <label className={`flex items-center gap-2 bg-white border-2 rounded-xl px-3 py-2 transition ${canTakeFullAccount ? 'border-blue-100 cursor-pointer hover:border-blue-300' : 'border-slate-100 opacity-50 cursor-not-allowed'}`}>
-                                                        <input
-                                                            type="radio"
-                                                            name="accountUsageMode"
-                                                            value="shared_two_devices"
-                                                            checked={accountUsageMode === 'shared_two_devices'}
-                                                            onChange={() => setAccountUsageMode('shared_two_devices')}
-                                                            disabled={!canTakeFullAccount && accountUsageMode !== 'shared_two_devices'}
-                                                            className="accent-blue-600"
-                                                        />
-                                                        <span className="text-xs font-black text-slate-700">خرج الجهازين</span>
-                                                    </label>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })()}
                                     </div>
 
                                     {/* عميل سابق - اختيار من القائمة */}
@@ -1108,36 +1380,7 @@ export default function Sales() {
                                     <textarea name="notes" defaultValue={editingSale?.notes} className="w-full bg-white border-2 border-slate-200 rounded-xl p-3.5 font-bold text-sm focus:ring-4 focus:ring-indigo-100 focus:border-indigo-600 outline-none transition-all h-20 resize-none" placeholder="أي ملاحظات إضافية..."></textarea>
                                 </div>
 
-                                {/* نوع البيع: شخصي / Workspace */}
-                                <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                                    <div className="text-xs font-black text-cyan-600 uppercase tracking-widest mb-2"><i className="fa-solid fa-users-rectangle ml-1"></i> نوع الإيميل</div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button type="button" onClick={() => { setSaleType('personal'); setWorkspaceEmail(''); }}
-                                            className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${saleType === 'personal' ? 'border-indigo-500 bg-indigo-50 shadow-sm' : 'border-slate-200 hover:border-indigo-200'}`}>
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${saleType === 'personal' ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'}`}><i className="fa-solid fa-user"></i></div>
-                                            <span className="text-sm font-extrabold text-slate-700">شخصي</span>
-                                            <span className="text-[10px] text-slate-400 font-medium">إيميل العميل الشخصي</span>
-                                        </button>
-                                        <button type="button" onClick={() => setSaleType('workspace')}
-                                            className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${saleType === 'workspace' ? 'border-cyan-500 bg-cyan-50 shadow-sm' : 'border-slate-200 hover:border-cyan-200'}`}>
-                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg ${saleType === 'workspace' ? 'bg-cyan-600 text-white' : 'bg-slate-100 text-slate-500'}`}><i className="fa-solid fa-users-rectangle"></i></div>
-                                            <span className="text-sm font-extrabold text-slate-700">Workspace</span>
-                                            <span className="text-[10px] text-slate-400 font-medium">ضمن مجموعة عمل</span>
-                                        </button>
-                                    </div>
-                                    {saleType === 'workspace' && (
-                                        <div className="animate-fade-in">
-                                            <label className="block text-sm font-extrabold text-slate-800 mb-2">إيميل الـ Workspace <span className="text-red-400">*</span></label>
-                                            <input type="email" value={workspaceEmail} onChange={e => setWorkspaceEmail(e.target.value)}
-                                                className="w-full bg-white border-2 border-cyan-300 rounded-xl p-3.5 font-bold text-sm focus:ring-4 focus:ring-cyan-100 focus:border-cyan-600 outline-none transition-all font-mono dir-ltr text-right text-cyan-700"
-                                                placeholder="workspace@example.com" required />
-                                            <p className="text-[11px] text-slate-400 mt-2 font-medium">
-                                                <i className="fa-solid fa-info-circle ml-1 text-cyan-400"></i>
-                                                الإيميل اللي هيستخدم لتفعيل العميل على Workspace مشترك
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
+
                             </form>
                         </div>
                         <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3">
