@@ -134,14 +134,25 @@ export default function Sales() {
         const account = sheetAccounts.find(item => String(item.id) === String(accountId));
         if (!account) return;
 
+        // القاعدة: الحساب فيه 2 slots إجمالي
+        // شخصي = 2 slots (الحساب كله لشخص واحد)
+        // مشترك = 1 slot (ممكن يتباع مرتين)
         const currentUses = Math.max(0, Number(account.currentUses || 0));
         const maxUses = Math.max(1, Number(account.maxUses || 2));
-        if (currentUses > 0 || maxUses < 2) {
+        const remainingSlots = maxUses - currentUses;
+
+        if (remainingSlots >= 2) {
+            // متاح للشخصي أو المشترك — الافتراضي شخصي
+            setSalePlanType('personal');
+            setAccountUsageMode('personal');
+        } else if (remainingSlots === 1) {
+            // slot واحد فقط — مشترك بجهاز واحد فقط
             setSalePlanType('shared_one_device');
             setAccountUsageMode('shared_one_device');
         } else {
-            setSalePlanType('personal');
-            setAccountUsageMode('personal');
+            // ممتلئ — نحافظ على الاختيار الحالي (سيظهر تحذير)
+            setSalePlanType('shared_one_device');
+            setAccountUsageMode('shared_one_device');
         }
 
         if (!formRef.current) return;
@@ -166,10 +177,12 @@ export default function Sales() {
             if (String(item.id) !== String(accountId)) return item;
             const maxUses = Math.max(1, Number(item.maxUses || 2));
             const currentUses = Math.min(maxUses, Math.max(0, Number(item.currentUses || 0) + delta));
+            // القاعدة: شخصي = 2 slots مستخدمة = ممتلئ شخصي
+            // مشترك slot واحد = 1، slot اتنين = 2 = ممتلئ مشترك
             const accountUsageStatus = currentUses <= 0
                 ? 'available'
                 : currentUses >= maxUses
-                ? (usageMode === 'personal' ? 'personal' : 'shared_two_devices')
+                ? (usageMode === 'personal' ? 'personal_full' : 'shared_full')
                 : 'shared_one_device';
             return {
                 ...item,
@@ -434,9 +447,18 @@ export default function Sales() {
 
                 await salesAPI.create(data);
                 if (selectedSheetAccount) {
-                    const maxUses = Math.max(1, Number(selectedSheetAccount.maxUses || 2));
-                    const currentUses = Math.max(0, Number(selectedSheetAccount.currentUses || 0));
-                    const usageDelta = selectedAccountUsageMode === 'shared_one_device' ? 1 : Math.max(1, maxUses - currentUses);
+                    // القاعدة الصحيحة:
+                    // شخصي = 2 slots (الحساب كله)
+                    // مشترك جهاز واحد = 1 slot
+                    // مشترك جهازين = 2 slots
+                    let usageDelta;
+                    if (selectedAccountUsageMode === 'personal') {
+                        usageDelta = 2; // شخصي = الحساب كله
+                    } else if (selectedAccountUsageMode === 'shared_two_devices') {
+                        usageDelta = 2; // مشترك جهازين = نفس الحساب كله
+                    } else {
+                        usageDelta = 1; // مشترك جهاز واحد = نص الحساب
+                    }
                     await updateSheetAccountUsage(selectedSheetAccount.id, usageDelta, selectedAccountUsageMode);
                 }
 

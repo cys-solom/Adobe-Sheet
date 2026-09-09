@@ -65,8 +65,19 @@ export async function sellCloudAccount(record, accountId) {
     // 3. If accountId provided, update account usage in account_data
     let updatedAccountRecords = accountRecords;
     if (accountId) {
-        const isTwoDevices = record.deviceType === 'جهازين' || record.deviceType === 'شخصي' || record.accountUsageMode === 'personal';
-        const delta = isTwoDevices ? 2 : 1;
+        // القاعدة الصحيحة:
+        // شخصي = 2 slots (الحساب كله لشخص واحد)
+        // مشترك جهاز واحد = 1 slot (ممكن يتباع مرتين)
+        // مشترك جهازين = 2 slots (نفس الحساب كله)
+        const saleMode = record.accountUsageMode || record.saleType || 'shared_one_device';
+        let delta;
+        if (saleMode === 'personal') {
+            delta = 2; // شخصي = الحساب كله
+        } else if (saleMode === 'shared_two_devices') {
+            delta = 2; // مشترك جهازين = نفس الحساب كله
+        } else {
+            delta = 1; // مشترك جهاز واحد = نصف الحساب
+        }
 
         updatedAccountRecords = accountRecords.map(acc => {
             if (String(acc.id) !== String(accountId)) return acc;
@@ -75,7 +86,7 @@ export async function sellCloudAccount(record, accountId) {
             const accountUsageStatus = currentUses <= 0
                 ? 'available'
                 : currentUses >= maxUses
-                ? (isTwoDevices ? 'shared_two_devices' : 'sold')
+                ? (saleMode === 'personal' ? 'personal_full' : 'shared_full')
                 : 'shared_one_device';
 
             return {

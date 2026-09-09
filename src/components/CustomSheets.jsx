@@ -2689,49 +2689,56 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         {(() => {
                                                             const currentUses = Math.max(0, Number(rec.currentUses || 0));
                                                             const maxUses = Math.max(1, Number(rec.maxUses || 2));
+                                                            // اشتق الحالة الصحيحة — الأولوية للـ accountUsageStatus المحفوظ
                                                             const status = rec.accountUsageStatus || (
-                                                                currentUses >= maxUses ? 'shared_two_devices' :
-                                                                currentUses === 1 ? 'shared_one_device' :
-                                                                'available'
+                                                                currentUses <= 0 ? 'available' :
+                                                                currentUses >= maxUses ? 'shared_full' :
+                                                                'shared_one_device'
                                                             );
-                                                            const optionClass = (value, statusValue) => {
-                                                                const active = currentUses === value && status === statusValue;
-                                                                if (statusValue === 'available') return active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100';
-                                                                if (statusValue === 'personal') return active ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100';
-                                                                if (statusValue === 'shared_one_device') return active ? 'bg-amber-500 text-white border-amber-500' : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100';
-                                                                return active ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100';
+                                                            const optionClass = (active, color) => {
+                                                                const colors = {
+                                                                    green: active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+                                                                    dark:  active ? 'bg-slate-900 text-white border-slate-900'   : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100',
+                                                                    amber: active ? 'bg-amber-500 text-white border-amber-500'   : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
+                                                                    rose:  active ? 'bg-rose-600 text-white border-rose-600'     : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100',
+                                                                };
+                                                                return colors[color];
                                                             };
                                                             return (
                                                                 <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 whitespace-nowrap">
+                                                                    {/* متاح: 0/2 slots */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, 0, 'available')}
-                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(0, 'available')}`}
-                                                                        title="الحساب لم يخرج لأي عميل"
+                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'available', 'green')}`}
+                                                                        title="الحساب لم يخرج لأي عميل — 0/2 slots"
                                                                     >
                                                                         متاح
                                                                     </button>
+                                                                    {/* شخصي: الحساب كله لشخص واحد — 2/2 slots */}
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => handleSetAccountUsage(rec.id, maxUses, 'personal')}
-                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(maxUses, 'personal')}`}
-                                                                        title="الحساب شخصي وخرج كامل لعميل واحد"
+                                                                        onClick={() => handleSetAccountUsage(rec.id, maxUses, 'personal_full')}
+                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'personal_full', 'dark')}`}
+                                                                        title="شخصي — الحساب كله لعميل واحد (2/2 slots)"
                                                                     >
                                                                         شخصي
                                                                     </button>
+                                                                    {/* مشترك جهاز: 1/2 slots مستخدم — slot واحد متبقي */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, 1, 'shared_one_device')}
-                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(1, 'shared_one_device')}`}
-                                                                        title="حساب مشترك خرج منه جهاز واحد ولسه متاح لجهاز آخر"
+                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_one_device', 'amber')}`}
+                                                                        title="مشترك — جهاز واحد خرج، slot واحد متبقي (1/2 slots)"
                                                                     >
                                                                         مشترك جهاز
                                                                     </button>
+                                                                    {/* مشترك كامل: 2/2 slots — الجهازين خرجوا */}
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => handleSetAccountUsage(rec.id, maxUses, 'shared_two_devices')}
-                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(maxUses, 'shared_two_devices')}`}
-                                                                        title="حساب مشترك خرج الجهازين واكتمل"
+                                                                        onClick={() => handleSetAccountUsage(rec.id, maxUses, 'shared_full')}
+                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_full', 'rose')}`}
+                                                                        title="مشترك كامل — الجهازين خرجوا (2/2 slots)"
                                                                     >
                                                                         مشترك كامل
                                                                     </button>
