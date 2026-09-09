@@ -649,7 +649,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 updated_at: new Date().toISOString()
             };
             if (currentSheetId === 'client_data' && accountEntryMode === 'available') {
-                await sellCloudAccount(newRecord, findSelectedAvailableAccount().id);
+                const selectedAcc = findSelectedAvailableAccount();
+                await sellCloudAccount(newRecord, selectedAcc?.id);
             } else if (!await saveRecords([newRecord, ...records])) return;
             showToast('تم إضافة السجل الجديد بنجاح ✓', 'success');
         }
@@ -675,8 +676,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             offerActivated: false,
             offerActivatedAt: ''
         });
-        } catch {
-            showToast('تعذر حفظ البيع. تأكد من اتصال قاعدة البيانات وتوفر الحساب، ثم حاول مرة أخرى.', 'error');
+        } catch (err) {
+            console.error('Error saving record/sale:', err);
+            showToast('تعذر حفظ البيع: ' + (err?.message || 'تأكد من اتصال قاعدة البيانات وتوفر الحساب'), 'error');
         } finally { setIsSaving(false); }
     };
 
