@@ -256,6 +256,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     // Form State
     const [formData, setFormData] = useState({
+        name: '',
+        phone: '',
+        contactChannel: 'واتساب',
         email: '',
         password: '',
         password2: '',
@@ -553,6 +556,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         const isPersonalSelection = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
         const cleanPayload = isClientOrMerchant ? {
+            name: formData.name || '',
+            phone: formData.phone || '',
+            contactChannel: formData.contactChannel || 'واتساب',
             email: formData.email,
             password: formData.password,
             password2: formData.password2 || 'Service2030@',
@@ -661,6 +667,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setEditingRecord(null);
         setAccountEntryMode('available');
         setFormData({
+            name: '',
+            phone: '',
+            contactChannel: 'واتساب',
             email: '',
             password: '',
             password2: '',
@@ -690,6 +699,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setEditingRecord(rec);
         setAccountEntryMode(rec.selectedAccount ? 'available' : 'manual');
         setFormData({
+            name: rec.name || '',
+            phone: rec.phone || '',
+            contactChannel: rec.contactChannel || 'واتساب',
             email: rec.email || '',
             password: rec.password || '',
             password2: rec.password2 || '',
@@ -1003,6 +1015,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         if (isTrashSheet) {
             dataToExport = records.map((r, i) => ({
                 'م': i + 1,
+                'اسم العميل': r.name || '',
+                'رقم/يوزر التواصل': r.phone || '',
+                'وسيلة التواصل': r.contactChannel || '',
                 'البريد الإلكتروني (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
@@ -1015,6 +1030,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         } else if (isClientOrMerchant) {
             dataToExport = records.map((r, i) => ({
                 'م': i + 1,
+                'اسم العميل': r.name || '',
+                'رقم/يوزر التواصل': r.phone || '',
+                'وسيلة التواصل': r.contactChannel || '',
                 'البريد الإلكتروني (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
@@ -1275,6 +1293,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return (
                     String(r.email || '').toLowerCase().includes(q) ||
+                    String(r.name || '').toLowerCase().includes(q) ||
+                    String(r.phone || '').toLowerCase().includes(q) ||
+                    String(r.contactChannel || '').toLowerCase().includes(q) ||
                     String(r.password || '').toLowerCase().includes(q) ||
                     String(r.password2 || '').toLowerCase().includes(q) ||
                     String(r.originSheetName || '').toLowerCase().includes(q) ||
@@ -1712,6 +1733,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         setEditingRecord(null);
                                         setAccountEntryMode('available');
                                         setFormData({
+                                            name: '',
+                                            phone: '',
+                                            contactChannel: 'واتساب',
                                             email: '',
                                             password: currentSheetId === 'reminders_data' ? '🔴 عاجل جداً' : '',
                                             password2: '',
@@ -2004,6 +2028,29 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </>
                                 ) : (
                                     <>
+                                        {currentSheetId === 'client_data' && (
+                                            <>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'name', asc: sortBy.field === 'name' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>اسم العميل</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th
+                                                    onClick={() => setSortBy({ field: 'phone', asc: sortBy.field === 'phone' ? !sortBy.asc : true })}
+                                                    className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
+                                                >
+                                                    <div className="flex items-center gap-1">
+                                                        <span>التواصل</span>
+                                                        <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
+                                                    </div>
+                                                </th>
+                                                <th className="px-1.5 py-1.5">الوسيلة</th>
+                                            </>
+                                        )}
                                         <th
                                             onClick={() => setSortBy({ field: 'email', asc: sortBy.field === 'email' ? !sortBy.asc : true })}
                                             className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
@@ -2147,7 +2194,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
                             {paginatedRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={isTrashSheet ? 8 : (currentSheetId === 'reminders_data' ? 6 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 8 : 9)))} className="p-12 text-center text-slate-400">
+                                    <td colSpan={isTrashSheet ? 8 : (currentSheetId === 'reminders_data' ? 6 : (currentSheetId === 'client_data' ? 12 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 8 : 9))))} className="p-12 text-center text-slate-400">
                                         <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-2xl">
                                             <i className={`fa-solid ${isTrashSheet ? 'fa-trash-can text-rose-400' : (currentSheetId === 'reminders_data' ? 'fa-bell text-amber-500' : 'fa-folder-open')}`}></i>
                                         </div>
@@ -2315,16 +2362,86 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     const isPassVisible = visibleSecrets[`${rec.id}_pass`] !== false;
                                     const isPass2Visible = visibleSecrets[`${rec.id}_pass2`] !== false;
                                     const isVisaVisible = visibleSecrets[`${rec.id}_visa`];
+                                    const isPersonalRecord = rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين';
 
                                     return (
                                         <tr
                                             key={rec.id}
-                                            className="transition-colors hover:bg-indigo-50/30 dark:hover:bg-slate-800/50"
+                                            className={`transition-colors ${
+                                                currentSheetId === 'client_data'
+                                                    ? isPersonalRecord
+                                                        ? 'border-r-4 border-r-cyan-500 bg-cyan-50/85 hover:bg-cyan-100/75 dark:border-r-cyan-400 dark:bg-cyan-950/25 dark:hover:bg-cyan-950/40'
+                                                        : 'border-r-4 border-r-amber-500 bg-amber-50/85 hover:bg-amber-100/75 dark:border-r-amber-400 dark:bg-amber-950/25 dark:hover:bg-amber-950/40'
+                                                    : 'hover:bg-indigo-50/30 dark:hover:bg-slate-800/50'
+                                            }`}
                                         >
                                             {/* Row # */}
                                             <td className="px-1 py-1 text-center font-mono text-slate-400 text-[10px]">
                                                 {rowNum}
                                             </td>
+
+                                            {currentSheetId === 'client_data' && (
+                                                <>
+                                                    <td className="px-1.5 py-1 max-w-[160px]">
+                                                        <div
+                                                            className={`inline-flex w-full min-w-0 items-center gap-2 rounded-lg border px-2 py-1 shadow-xs ${
+                                                                isPersonalRecord
+                                                                    ? 'border-cyan-200 bg-white/65 text-cyan-950 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-100'
+                                                                    : 'border-amber-200 bg-white/65 text-amber-950 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-100'
+                                                            }`}
+                                                            title={rec.name || 'عميل بدون اسم'}
+                                                        >
+                                                            <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
+                                                                isPersonalRecord
+                                                                    ? 'bg-cyan-100 text-cyan-700 dark:bg-cyan-800/60 dark:text-cyan-200'
+                                                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-800/60 dark:text-amber-200'
+                                                            }`}>
+                                                                <i className="fa-solid fa-user text-[9px]"></i>
+                                                            </span>
+                                                            <span className="truncate text-[11px] font-black">{rec.name || 'عميل بدون اسم'}</span>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-1.5 py-1 max-w-[170px]">
+                                                        {rec.phone ? (
+                                                            <div className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 shadow-xs ${
+                                                                isPersonalRecord
+                                                                    ? 'border-cyan-200 bg-white/65 text-cyan-950 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-100'
+                                                                    : 'border-amber-200 bg-white/65 text-amber-950 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-100'
+                                                            }`}>
+                                                                <i className={`fa-solid fa-phone text-[9px] ${isPersonalRecord ? 'text-cyan-500' : 'text-amber-500'}`}></i>
+                                                                <span className="truncate block dir-ltr text-right text-[11px] font-black" title={rec.phone}>{rec.phone}</span>
+                                                                <button
+                                                                    onClick={() => handleCopy(rec.phone, `phone_${rec.id}`)}
+                                                                    className={`mr-auto rounded-md p-0.5 transition ${
+                                                                        isPersonalRecord
+                                                                            ? 'text-cyan-500 hover:bg-cyan-100 hover:text-cyan-700 dark:hover:bg-cyan-800/60 dark:hover:text-cyan-100'
+                                                                            : 'text-amber-500 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-800/60 dark:hover:text-amber-100'
+                                                                    }`}
+                                                                    title="نسخ بيانات التواصل"
+                                                                >
+                                                                    <i className={`fa-solid ${copiedField === `phone_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                            <span className={`inline-flex w-full items-center justify-center rounded-lg border px-2 py-1 text-[11px] font-bold ${
+                                                                isPersonalRecord
+                                                                    ? 'border-cyan-200 bg-white/65 text-cyan-600 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-300'
+                                                                    : 'border-amber-200 bg-white/65 text-amber-600 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-300'
+                                                            }`}>لا يوجد تواصل</span>
+                                                        )}
+                                                    </td>
+                                                    <td className="px-1.5 py-1 whitespace-nowrap">
+                                                        <span className={`inline-flex min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-black ${
+                                                            rec.contactChannel === 'ماسنجر'
+                                                                ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                                                                : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                                                        }`}>
+                                                            <i className={`fa-brands ${rec.contactChannel === 'ماسنجر' ? 'fa-facebook-messenger' : 'fa-whatsapp'} text-[10px]`}></i>
+                                                            <span>{rec.contactChannel || 'واتساب'}</span>
+                                                        </span>
+                                                    </td>
+                                                </>
+                                            )}
 
                                             {/* Email */}
                                             <td className="px-1.5 py-1 font-medium">
@@ -2345,7 +2462,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         >
                                                             <i className={`fa-solid ${copiedField === `em_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
-                                                        {currentSheetId === 'account_data' && (
+                                                        {(currentSheetId === 'account_data' || currentSheetId === 'client_data') && (
                                                             <button
                                                                 onClick={() => handleCopyAdobeAccess(rec)}
                                                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-black transition whitespace-nowrap ${
@@ -2356,7 +2473,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 title="نسخ الإيميل و Adobe Password برسالة جاهزة"
                                                             >
                                                                 <i className={`fa-solid ${copiedField === `adobe_access_${rec.id}` ? 'fa-check' : 'fa-file-lines'} text-[8px]`}></i>
-                                                                <span>نسخ Adobe</span>
+                                                                <span>{currentSheetId === 'client_data' ? 'Adobe' : 'نسخ Adobe'}</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -2554,15 +2671,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     </td>
                                                     {/* Device Type (نوع الاشتراك: شخصي أم مشترك) */}
                                                     <td className="px-1.5 py-1 font-medium">
-                                                        {(rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين') ? (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs whitespace-nowrap">
-                                                                <i className="fa-solid fa-user-shield text-[8px]"></i>
-                                                                <span>شخصي</span>
+                                                        {isPersonalRecord ? (
+                                                            <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-black text-cyan-700 shadow-xs whitespace-nowrap dark:border-cyan-800/70 dark:bg-cyan-950/35 dark:text-cyan-300">
+                                                                <i className="fa-solid fa-mobile-screen-button text-[10px]"></i>
+                                                                <span>جهازين</span>
                                                             </span>
                                                         ) : (
-                                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200/70 dark:border-purple-800/60 shadow-xs whitespace-nowrap">
-                                                                <i className="fa-solid fa-laptop text-[8px]"></i>
-                                                                <span>مشترك</span>
+                                                            <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 shadow-xs whitespace-nowrap dark:border-amber-800/70 dark:bg-amber-950/35 dark:text-amber-300">
+                                                                <i className="fa-solid fa-mobile-screen text-[10px]"></i>
+                                                                <span>جهاز</span>
                                                             </span>
                                                         )}
                                                     </td>
@@ -3010,32 +3127,82 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     المتاح: {availableAccountChoices.length}
                                                 </span>
                                             </div>
-                                            <select
-                                                value={availableAccountChoices.some(acc => (acc.email || acc.selectedAccount) === formData.selectedAccount) ? formData.selectedAccount : ''}
-                                                onChange={(e) => handleSelectAvailableAccount(e.target.value)}
-                                                className="w-full bg-white dark:bg-slate-900 border-2 border-purple-200 dark:border-purple-800 hover:border-purple-400 focus:border-purple-500 rounded-xl px-3 py-2.5 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/20"
-                                            >
-                                                <option value="">اختار ميل من الحسابات غير المكتملة</option>
-                                                {availableAccountChoices.map(acc => {
-                                                    const maxUses = Math.max(1, Number(acc.maxUses || 2));
-                                                    const currentUses = Math.max(0, Number(acc.currentUses || 0));
-                                                    const remaining = Math.max(0, maxUses - currentUses);
-                                                    const accountEmail = acc.email || acc.selectedAccount || '';
-                                                    const isFull = currentUses === 0;
-                                                    const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
-                                                    const disabledForPersonal = isPersonalChosen && !isFull;
-                                                    const statusText = isFull ? `متاح بالكامل (جهازين)` : `مشترك (متبقي جهاز 1)`;
-                                                    return (
-                                                        <option
-                                                            key={acc.id}
-                                                            value={accountEmail || acc.id}
-                                                            disabled={disabledForPersonal}
-                                                        >
-                                                            {(accountEmail || 'حساب بدون ميل')} - {statusText} {disabledForPersonal ? '⚠️ (غير صالح للشخصي)' : ''}
-                                                        </option>
-                                                    );
-                                                })}
-                                            </select>
+                                            {availableAccountChoices.length > 0 ? (
+                                                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-modal-scroll">
+                                                    {availableAccountChoices.map(acc => {
+                                                        const maxUses = Math.max(1, Number(acc.maxUses || 2));
+                                                        const currentUses = Math.max(0, Number(acc.currentUses || 0));
+                                                        const remaining = Math.max(0, maxUses - currentUses);
+                                                        const accountEmail = acc.email || acc.selectedAccount || '';
+                                                        const isFull = currentUses === 0;
+                                                        const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+                                                        const disabledForPersonal = isPersonalChosen && !isFull;
+                                                        const selectedValue = String(formData.selectedAccount || '').toLowerCase();
+                                                        const isSelected = selectedValue
+                                                            && [acc.id, acc.email, acc.selectedAccount].some(value => String(value || '').toLowerCase() === selectedValue);
+                                                        const availabilityLabel = isFull && maxUses >= 2 ? 'جهازين متاحين' : `متبقي ${remaining} جهاز`;
+                                                        const availabilityHint = isFull && maxUses >= 2 ? 'ينفع شخصي أو مشترك' : 'ينفع مشترك فقط';
+
+                                                        return (
+                                                            <button
+                                                                key={acc.id}
+                                                                type="button"
+                                                                disabled={disabledForPersonal}
+                                                                onClick={() => handleSelectAvailableAccount(accountEmail || acc.id)}
+                                                                className={`w-full rounded-2xl border-2 p-3 text-right transition ${
+                                                                    disabledForPersonal
+                                                                        ? 'cursor-not-allowed bg-slate-100/80 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 opacity-60'
+                                                                        : isSelected
+                                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-lg shadow-indigo-500/20'
+                                                                            : isFull
+                                                                                ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-800 hover:border-emerald-400 hover:shadow-sm'
+                                                                                : 'bg-violet-50 dark:bg-violet-950/30 border-violet-200 dark:border-violet-800 hover:border-violet-400 hover:shadow-sm'
+                                                                }`}
+                                                            >
+                                                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                                                                    <div className="min-w-0">
+                                                                        <div dir="ltr" className={`font-mono text-xs font-black truncate text-left ${
+                                                                            isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'
+                                                                        }`}>
+                                                                            {accountEmail || 'حساب بدون ميل'}
+                                                                        </div>
+                                                                        <div className={`mt-1 text-[11px] font-bold ${
+                                                                            isSelected ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'
+                                                                        }`}>
+                                                                            {availabilityHint}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-black border ${
+                                                                            isSelected
+                                                                                ? 'bg-white/15 text-white border-white/30'
+                                                                                : isFull
+                                                                                    ? 'bg-emerald-600 text-white border-emerald-600'
+                                                                                    : 'bg-violet-600 text-white border-violet-600'
+                                                                        }`}>
+                                                                            <i className={`fa-solid ${isFull ? 'fa-mobile-screen-button' : 'fa-mobile-screen'} text-[10px]`}></i>
+                                                                            {availabilityLabel}
+                                                                        </span>
+                                                                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black ${
+                                                                            isSelected
+                                                                                ? 'bg-white/15 text-white'
+                                                                                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300'
+                                                                        }`}>
+                                                                            مستخدم {currentUses}/{maxUses}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 px-4 py-5 text-center">
+                                                    <i className="fa-solid fa-inbox text-slate-300 dark:text-slate-600 text-xl mb-2"></i>
+                                                    <div className="text-xs font-black text-slate-500 dark:text-slate-400">لا توجد إيميلات متاحة حاليا</div>
+                                                </div>
+                                            )}
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
                                                 {formData.deviceType === 'شخصي'
                                                     ? '🟢 الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (الجهازين معاً لم يتم استخدام أي منهما).'
@@ -3059,6 +3226,72 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            )}
+                            {currentSheetId === 'client_data' && (
+                                <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 space-y-3">
+                                    <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-black text-xs">
+                                        <i className="fa-solid fa-address-card text-indigo-500"></i>
+                                        <span>بيانات العميل والتواصل</span>
+                                        <span className="text-[10px] font-bold text-slate-400">اختياري</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                اسم العميل
+                                            </label>
+                                            <div className="relative">
+                                                <i className="fa-solid fa-user absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    value={formData.name}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                                                    placeholder="اسم العميل إن وجد"
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                                رقم الهاتف أو يوزر واتساب
+                                            </label>
+                                            <div className="relative">
+                                                <i className="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+                                                <input
+                                                    type="text"
+                                                    value={formData.phone}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                                                    placeholder="010... أو username"
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                            وسيلة التواصل
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {['واتساب', 'ماسنجر'].map(channel => (
+                                                <button
+                                                    key={channel}
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({ ...prev, contactChannel: channel }))}
+                                                    className={`py-2.5 px-3 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition ${
+                                                        formData.contactChannel === channel
+                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                                                    }`}
+                                                >
+                                                    <i className={`fa-brands ${channel === 'واتساب' ? 'fa-whatsapp' : 'fa-facebook-messenger'} text-sm`}></i>
+                                                    <span>{channel}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                             {currentSheetId === 'reminders_data' ? (

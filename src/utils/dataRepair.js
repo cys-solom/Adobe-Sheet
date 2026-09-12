@@ -19,6 +19,7 @@ export const sanitizeRecord = (r, idx = 0) => {
     const rawInvoice = r.invoiceNumber ?? r.invoice ?? r['رقم الفاتورة'] ?? r['الفاتورة'] ?? '';
     const rawName = r.name ?? r['اسم العميل'] ?? r['العميل'] ?? '';
     const rawPhone = r.phone ?? r['رقم الهاتف'] ?? r['الهاتف'] ?? r['موبايل'] ?? '';
+    const rawContactChannel = r.contactChannel ?? r.contact_channel ?? r['وسيلة التواصل'] ?? r['طريقة التواصل'] ?? '';
     const rawEmail = r.email ?? r['البريد الإلكتروني'] ?? r['الإيميل'] ?? '';
     const rawPassword = r.password ?? r.outlookPassword ?? r['Outlook Password'] ?? r['outlook password'] ?? r['الباسورد'] ?? r['كلمة المرور'] ?? r['الباسورد الأول'] ?? '';
     const rawPassword2 = r.password2 ?? r.adobePassword ?? r['Adobe Password'] ?? r['adobe password'] ?? r['الباسورد الثاني'] ?? r['كلمة المرور 2'] ?? r['الباسورد البديل'] ?? '';
@@ -72,14 +73,7 @@ export const sanitizeRecord = (r, idx = 0) => {
         return status;
     })();
 
-    // Assemble notes, appending phone/name if they existed separately
     let rawNotes = r.notes ?? r['ملاحظات'] ?? '';
-    const extras = [];
-    if (rawName && !String(rawNotes).includes(String(rawName))) extras.push(`العميل: ${rawName}`);
-    if (rawPhone && !String(rawNotes).includes(String(rawPhone))) extras.push(`الهاتف: ${rawPhone}`);
-    if (extras.length > 0) {
-        rawNotes = rawNotes ? `${rawNotes} | ${extras.join(' - ')}` : extras.join(' - ');
-    }
 
     const cleanPassword2 = String(rawPassword2 || '').trim();
     const finalPassword2 = (!cleanPassword2 || cleanPassword2 === 'Will be added later' || cleanPassword2 === 'سيتم إضافته لاحقاً')
@@ -88,6 +82,9 @@ export const sanitizeRecord = (r, idx = 0) => {
 
     return {
         id: String(r.id || `REC-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`),
+        name: String(rawName).trim(),
+        phone: String(rawPhone).trim(),
+        contactChannel: String(rawContactChannel || '').trim(),
         email: String(rawEmail).trim(),
         password: String(rawPassword).trim(),
         password2: finalPassword2,
