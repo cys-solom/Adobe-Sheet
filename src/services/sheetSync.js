@@ -32,15 +32,131 @@ export async function writeCloudSheet(sheetId, records) {
     if (channel) await channel.send({ type: 'broadcast', event: 'changed', payload: {} });
 }
 
+const getAccountKey = (value) => String(value || '').trim().toLowerCase();
+
+const isPersonalSaleRecord = (record) => (
+    record.accountUsageMode === 'personal'
+    || record.saleType === 'personal'
+    || record.deviceType === 'شخصي'
+    || record.deviceType === 'جهازين'
+);
+
+const getAccountRecordStatus = (uses, maxUses, hasPersonalSale) => {
+    if (uses <= 0) return 'available';
+    if (uses >= maxUses) return hasPersonalSale ? 'personal_full' : 'shared_full';
+    return 'shared_one_device';
+};
+
+export function recalculateAccountUsage(accountRecords = [], activeSaleRecords = []) {
+    const usage = new Map();
+
+    accountRecords.forEach(acc => {
+        const keys = [acc.id, acc.email, acc.selectedAccount].map(getAccountKey).filter(Boolean);
+        keys.forEach(key => {
+            if (!usage.has(key)) usage.set(key, { uses: 0, hasPersonalSale: false });
+        });
+    });
+
+    activeSaleRecords.forEach(record => {
+        if (record.deletedAt) return;
+        const selectedKey = getAccountKey(record.selectedAccount);
+        const emailKey = getAccountKey(record.email);
+        if (!selectedKey && !emailKey) return;
+
+        const isPersonal = isPersonalSaleRecord(record);
+        const delta = isPersonal ? 2 : 1;
+        const keys = Array.from(new Set([selectedKey, emailKey].filter(Boolean)));
+
+        keys.forEach(key => {
+            const current = usage.get(key) || { uses: 0, hasPersonalSale: false };
+            current.uses += delta;
+            current.hasPersonalSale = current.hasPersonalSale || isPersonal;
+            usage.set(key, current);
+        });
+    });
+
+    return accountRecords.map(acc => {
+        const keys = [acc.id, acc.email, acc.selectedAccount].map(getAccountKey).filter(Boolean);
+        const merged = keys.reduce((state, key) => {
+            const item = usage.get(key);
+            if (!item) return state;
+            return {
+                uses: Math.max(state.uses, item.uses),
+                hasPersonalSale: state.hasPersonalSale || item.hasPersonalSale
+            };
+        }, { uses: 0, hasPersonalSale: false });
+
+        const maxUses = Math.max(1, Number(acc.maxUses || 2));
+        const currentUses = Math.min(maxUses, Math.max(0, merged.uses));
+        return {
+            ...acc,
+            currentUses,
+            maxUses,
+            accountUsageStatus: getAccountRecordStatus(currentUses, maxUses, merged.hasPersonalSale),
+            updated_at: new Date().toISOString()
+        };
+    });
+}
+
+export async function syncAccountUsageFromCloudSheets(extraRows = {}) {
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+
+    const sheetIds = ['account_data', 'client_data', 'merchant_data'];
+    const { data, error } = await supabase
+        .from('custom_sheets_data')
+        .select('*')
+        .in('sheet_id', sheetIds);
+
+    if (error) {
+        status('error');
+        throw error;
+    }
+
+    const rows = {};
+    (data || []).forEach(row => {
+        rows[row.sheet_id] = Array.isArray(row.records) ? row.records : [];
+    });
+    Object.entries(extraRows || {}).forEach(([sheetId, records]) => {
+        rows[sheetId] = Array.isArray(records) ? records : [];
+    });
+
+    const accountRecords = rows.account_data || [];
+    const activeSales = [
+        ...(rows.client_data || []),
+        ...(rows.merchant_data || [])
+    ];
+    const updatedAccountRecords = recalculateAccountUsage(accountRecords, activeSales);
+
+    const { error: upsertError } = await supabase.from('custom_sheets_data').upsert({
+        sheet_id: 'account_data',
+        records: updatedAccountRecords,
+        updated_at: new Date().toISOString()
+    });
+
+    if (upsertError) {
+        status('error');
+        throw upsertError;
+    }
+
+    status('saved');
+    notifySheets();
+    if (channel) {
+        try { await channel.send({ type: 'broadcast', event: 'changed', payload: {} }); } catch {}
+    }
+
+    return updatedAccountRecords;
+}
+
 export async function sellCloudAccount(record, accountId, targetSheetId = 'client_data') {
     if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
     status('saving');
 
     // 1. Fetch current target sheet and account_data rows
+    const sheetIds = Array.from(new Set([targetSheetId, 'account_data', 'client_data', 'merchant_data']));
     const { data: sheetsData, error: readError } = await supabase
         .from('custom_sheets_data')
         .select('*')
-        .in('sheet_id', [targetSheetId, 'account_data']);
+        .in('sheet_id', sheetIds);
 
     if (readError) {
         status('error');
@@ -62,47 +178,21 @@ export async function sellCloudAccount(record, accountId, targetSheetId = 'clien
     };
     const updatedTargetRecords = [newRecord, ...targetRecords.filter(r => r.id !== newRecord.id)];
 
-    // 3. If accountId provided, update account usage in account_data
-    let updatedAccountRecords = accountRecords;
-    if (accountId) {
-        // القاعدة الصارمة:
-        // شخصي = 2 slots (الحساب كامل للجهازين لنفس الشخص)
-        // مشترك = 1 slot (جهاز واحد فقط)
-        const isPersonal = record.accountUsageMode === 'personal'
-            || record.saleType === 'personal'
-            || record.deviceType === 'شخصي'
-            || record.deviceType === 'جهازين';
-        const delta = isPersonal ? 2 : 1;
-
-        updatedAccountRecords = accountRecords.map(acc => {
-            if (String(acc.id) !== String(accountId)) return acc;
-            const maxUses = Math.max(1, Number(acc.maxUses || 2));
-            const currentUses = Math.min(maxUses, Math.max(0, Number(acc.currentUses || 0) + delta));
-            const accountUsageStatus = currentUses <= 0
-                ? 'available'
-                : currentUses >= maxUses
-                ? (isPersonal ? 'personal_full' : 'shared_full')
-                : 'shared_one_device';
-
-            return {
-                ...acc,
-                currentUses,
-                maxUses,
-                accountUsageStatus,
-                updated_at: new Date().toISOString()
-            };
-        });
-    }
+    const existingOtherSales = (sheetsData || [])
+        .filter(row => row.sheet_id !== targetSheetId && ['client_data', 'merchant_data'].includes(row.sheet_id))
+        .flatMap(row => Array.isArray(row.records) ? row.records : []);
+    const updatedAccountRecords = recalculateAccountUsage(accountRecords, [
+        ...updatedTargetRecords,
+        ...existingOtherSales
+    ]);
 
     // 4. Save both sheets to Supabase
     const upsertRows = [
         { sheet_id: targetSheetId, records: updatedTargetRecords, updated_at: new Date().toISOString() }
     ];
-    if (accountId) {
-        upsertRows.push({
-            sheet_id: 'account_data', records: updatedAccountRecords, updated_at: new Date().toISOString()
-        });
-    }
+    upsertRows.push({
+        sheet_id: 'account_data', records: updatedAccountRecords, updated_at: new Date().toISOString()
+    });
 
     const { error: upsertError } = await supabase
         .from('custom_sheets_data')

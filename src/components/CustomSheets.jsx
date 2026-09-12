@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
 import { sheetsAPI } from '../services/api';
-import { SHEETS_CHANGED, sellCloudAccount } from '../services/sheetSync';
+import { SHEETS_CHANGED, sellCloudAccount, syncAccountUsageFromCloudSheets } from '../services/sheetSync';
 import {
     DEFAULT_SHEETS,
     sanitizeRecord,
@@ -383,7 +383,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         try {
             const sanitized = newRecords.map((r, i) => sanitizeRecord(r, i)).filter(Boolean);
             await sheetsAPI.saveSheetRecords(currentSheetId, sanitized);
-            setRecords(sanitized);
+            let visibleRecords = sanitized;
+            if (['client_data', 'merchant_data', 'account_data'].includes(currentSheetId)) {
+                const syncedAccounts = await syncAccountUsageFromCloudSheets({ [currentSheetId]: sanitized });
+                if (currentSheetId === 'account_data' && Array.isArray(syncedAccounts)) {
+                    visibleRecords = syncedAccounts.map((r, i) => sanitizeRecord(r, i)).filter(Boolean);
+                }
+            }
+            setRecords(visibleRecords);
             refreshAllCounts();
             if (currentSheetId === 'account_data') {
                 refreshAvailableAccounts();
@@ -426,15 +433,43 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             ].some(value => String(value || '').toLowerCase().includes(query));
         });
 
-        return [...filtered].sort((a, b) => {
-            const dateA = new Date(a.created_at || a.createdAt || a.date || 0).getTime() || 0;
-            const dateB = new Date(b.created_at || b.createdAt || b.date || 0).getTime() || 0;
-            if (availableAccountSort === 'oldest') return dateA - dateB;
-            if (availableAccountSort === 'email') {
-                return String(a.email || a.selectedAccount || '').localeCompare(String(b.email || b.selectedAccount || ''));
+        const getAccountSortTime = (acc) => {
+            const candidates = [
+                acc.created_at,
+                acc.createdAt,
+                acc.accountCreatedDate,
+                acc.startDate,
+                acc.date,
+                acc.updated_at,
+                acc.updatedAt
+            ];
+            for (const value of candidates) {
+                if (!value) continue;
+                const time = new Date(value).getTime();
+                if (!Number.isNaN(time)) return time;
             }
-            return dateB - dateA;
-        });
+            const idTime = String(acc.id || '').match(/\d{10,}/)?.[0];
+            return idTime ? Number(idTime) : 0;
+        };
+
+        return filtered
+            .map((acc, index) => ({ acc, index }))
+            .sort((a, b) => {
+                const accA = a.acc;
+                const accB = b.acc;
+                const emailA = String(accA.email || accA.selectedAccount || '');
+                const emailB = String(accB.email || accB.selectedAccount || '');
+
+                if (availableAccountSort === 'email') {
+                    return emailA.localeCompare(emailB) || (a.index - b.index);
+                }
+
+                const dateA = getAccountSortTime(accA);
+                const dateB = getAccountSortTime(accB);
+                const byDate = availableAccountSort === 'oldest' ? dateA - dateB : dateB - dateA;
+                return byDate || emailA.localeCompare(emailB) || (a.index - b.index);
+            })
+            .map(item => item.acc);
     }, [availableAccountChoices, availableAccountSearch, availableAccountSort]);
 
     const handleSelectAvailableAccount = (value) => {
@@ -822,6 +857,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
             const updatedTarget = [cleanRecord, ...targetRecords].map((r, i) => sanitizeRecord(r, i)).filter(Boolean);
             await sheetsAPI.saveSheetRecords(targetSheetId, updatedTarget);
+            if (['client_data', 'merchant_data', 'account_data'].includes(targetSheetId)) {
+                await syncAccountUsageFromCloudSheets({ [targetSheetId]: updatedTarget });
+            }
 
             // Remove from trash
             const updatedTrash = records.filter(r => r.id !== recordToRestore.id);
@@ -859,6 +897,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const currentDestData = await sheetsAPI.getSheetRecords(destId);
                 const updatedDest = [...grouped[destId], ...currentDestData].map((r, i) => sanitizeRecord(r, i)).filter(Boolean);
                 await sheetsAPI.saveSheetRecords(destId, updatedDest);
+                if (['client_data', 'merchant_data', 'account_data'].includes(destId)) {
+                    await syncAccountUsageFromCloudSheets({ [destId]: updatedDest });
+                }
             }
 
             // Remove all restored from trash
@@ -3170,8 +3211,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                                                     title="ترتيب الإيميلات"
                                                 >
-                                                    <option value="newest">الأحدث إنشاء</option>
-                                                    <option value="oldest">الأقدم إنشاء</option>
+                                                    <option value="newest">الأحدث بتاريخ الإنشاء</option>
+                                                    <option value="oldest">الأقدم بتاريخ الإنشاء</option>
                                                     <option value="email">حسب الإيميل</option>
                                                 </select>
                                             </div>
