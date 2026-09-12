@@ -277,6 +277,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         offerActivatedAt: ''
     });
     const [accountEntryMode, setAccountEntryMode] = useState('available');
+    const [availableAccountSearch, setAvailableAccountSearch] = useState('');
+    const [availableAccountSort, setAvailableAccountSort] = useState('newest');
 
     // Stored accounts loaded from account_data for dropdown selection
     const [availableAccounts, setAvailableAccounts] = useState([]);
@@ -410,6 +412,30 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             })
             .sort((a, b) => String(a.email || a.selectedAccount || '').localeCompare(String(b.email || b.selectedAccount || '')));
     }, [availableAccounts]);
+
+    const displayedAvailableAccountChoices = useMemo(() => {
+        const query = availableAccountSearch.trim().toLowerCase();
+        const filtered = availableAccountChoices.filter(acc => {
+            if (!query) return true;
+            return [
+                acc.email,
+                acc.selectedAccount,
+                acc.id,
+                acc.password,
+                acc.password2
+            ].some(value => String(value || '').toLowerCase().includes(query));
+        });
+
+        return [...filtered].sort((a, b) => {
+            const dateA = new Date(a.created_at || a.createdAt || a.date || 0).getTime() || 0;
+            const dateB = new Date(b.created_at || b.createdAt || b.date || 0).getTime() || 0;
+            if (availableAccountSort === 'oldest') return dateA - dateB;
+            if (availableAccountSort === 'email') {
+                return String(a.email || a.selectedAccount || '').localeCompare(String(b.email || b.selectedAccount || ''));
+            }
+            return dateB - dateA;
+        });
+    }, [availableAccountChoices, availableAccountSearch, availableAccountSort]);
 
     const handleSelectAvailableAccount = (value) => {
         const selectedValue = String(value || '').trim();
@@ -3124,12 +3150,34 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     الميل المتباع من بيانات الحساب
                                                 </label>
                                                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                    المتاح: {availableAccountChoices.length}
+                                                    المعروض: {displayedAvailableAccountChoices.length} / {availableAccountChoices.length}
                                                 </span>
                                             </div>
-                                            {availableAccountChoices.length > 0 ? (
+                                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                                                <div className="relative">
+                                                    <i className="fa-solid fa-magnifying-glass absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-[11px]"></i>
+                                                    <input
+                                                        type="text"
+                                                        value={availableAccountSearch}
+                                                        onChange={(e) => setAvailableAccountSearch(e.target.value)}
+                                                        placeholder="بحث في الإيميلات المتاحة..."
+                                                        className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 pr-8 pl-3 text-xs font-bold text-slate-800 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                                    />
+                                                </div>
+                                                <select
+                                                    value={availableAccountSort}
+                                                    onChange={(e) => setAvailableAccountSort(e.target.value)}
+                                                    className="rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                                                    title="ترتيب الإيميلات"
+                                                >
+                                                    <option value="newest">الأحدث إنشاء</option>
+                                                    <option value="oldest">الأقدم إنشاء</option>
+                                                    <option value="email">حسب الإيميل</option>
+                                                </select>
+                                            </div>
+                                            {displayedAvailableAccountChoices.length > 0 ? (
                                                 <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-modal-scroll">
-                                                    {availableAccountChoices.map(acc => {
+                                                    {displayedAvailableAccountChoices.map(acc => {
                                                         const maxUses = Math.max(1, Number(acc.maxUses || 2));
                                                         const currentUses = Math.max(0, Number(acc.currentUses || 0));
                                                         const remaining = Math.max(0, maxUses - currentUses);
@@ -3200,7 +3248,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             ) : (
                                                 <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 px-4 py-5 text-center">
                                                     <i className="fa-solid fa-inbox text-slate-300 dark:text-slate-600 text-xl mb-2"></i>
-                                                    <div className="text-xs font-black text-slate-500 dark:text-slate-400">لا توجد إيميلات متاحة حاليا</div>
+                                                    <div className="text-xs font-black text-slate-500 dark:text-slate-400">
+                                                        {availableAccountSearch ? 'لا توجد نتائج مطابقة للبحث' : 'لا توجد إيميلات متاحة حاليا'}
+                                                    </div>
                                                 </div>
                                             )}
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
