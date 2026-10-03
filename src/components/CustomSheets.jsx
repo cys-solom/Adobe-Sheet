@@ -2793,12 +2793,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     const isPass2Visible = visibleSecrets[`${rec.id}_pass2`] !== false;
                                     const isVisaVisible = visibleSecrets[`${rec.id}_visa`];
                                     const isPersonalRecord = rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين';
+                                    const isNotRenewedRecord = rec.renewalStatus === 'not_renewed' || Boolean(rec.nonRenewedAt);
 
                                     return (
                                         <tr
                                             key={rec.id}
                                             className={`transition-colors ${
-                                                currentSheetId === 'client_data'
+                                                isClientOrMerchant && isNotRenewedRecord
+                                                    ? 'border-r-4 border-r-red-600 bg-red-50/90 hover:bg-red-100/85 dark:border-r-red-500 dark:bg-red-950/30 dark:hover:bg-red-950/45'
+                                                    : currentSheetId === 'client_data'
                                                     ? isPersonalRecord
                                                         ? 'border-r-4 border-r-cyan-500 bg-cyan-50/85 hover:bg-cyan-100/75 dark:border-r-cyan-400 dark:bg-cyan-950/25 dark:hover:bg-cyan-950/40'
                                                         : 'border-r-4 border-r-amber-500 bg-amber-50/85 hover:bg-amber-100/75 dark:border-r-amber-400 dark:bg-amber-950/25 dark:hover:bg-amber-950/40'
