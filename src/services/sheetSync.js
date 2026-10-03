@@ -1,4 +1,4 @@
-import { supabase, isConfigured } from '../lib/supabase';
+﻿import { supabase, isConfigured } from '../lib/supabase';
 
 export const SHEETS_CHANGED = 'servicehub:sheets-changed';
 export const SYNC_STATUS = 'servicehub:sync-status';
@@ -7,7 +7,7 @@ const status = (state) => window.dispatchEvent(new CustomEvent(SYNC_STATUS, { de
 export const notifySheets = () => window.dispatchEvent(new Event(SHEETS_CHANGED));
 
 export async function readCloudSheets() {
-    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
     const { data, error } = await supabase.from('custom_sheets_data').select('*');
     if (error) { status('error'); throw error; }
     const result = {};
@@ -20,7 +20,7 @@ export async function readCloudSheets() {
 }
 
 export async function writeCloudSheet(sheetId, records) {
-    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
     status('saving');
     const { error } = await supabase.from('custom_sheets_data').upsert({
         sheet_id: sheetId, records, updated_at: new Date().toISOString()
@@ -37,8 +37,8 @@ const getAccountKey = (value) => String(value || '').trim().toLowerCase();
 const isPersonalSaleRecord = (record) => (
     record.accountUsageMode === 'personal'
     || record.saleType === 'personal'
-    || record.deviceType === 'شخصي'
-    || record.deviceType === 'جهازين'
+    || record.deviceType === 'Ø´Ø®ØµÙŠ'
+    || record.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†'
 );
 
 const getAccountRecordStatus = (uses, maxUses, hasPersonalSale) => {
@@ -58,7 +58,7 @@ export function recalculateAccountUsage(accountRecords = [], activeSaleRecords =
     });
 
     activeSaleRecords.forEach(record => {
-        if (record.deletedAt) return;
+        if (record.deletedAt || record.renewalStatus === 'not_renewed' || record.nonRenewedAt) return;
         const selectedKey = getAccountKey(record.selectedAccount);
         const emailKey = getAccountKey(record.email);
         if (!selectedKey && !emailKey) return;
@@ -98,8 +98,98 @@ export function recalculateAccountUsage(accountRecords = [], activeSaleRecords =
     });
 }
 
+
+const matchesAccountRecord = (account, saleRecord) => {
+    const accountKeys = [account.id, account.email, account.selectedAccount].map(getAccountKey).filter(Boolean);
+    const saleKeys = [saleRecord.selectedAccount, saleRecord.email].map(getAccountKey).filter(Boolean);
+    return accountKeys.some(key => saleKeys.includes(key));
+};
+
+export async function markSubscriptionNotRenewed({ sheetId, recordId, newPassword = '' }) {
+    if (!isConfigured) throw new Error('Database is not connected');
+    if (!sheetId || !recordId) throw new Error('Subscription data is incomplete');
+
+    status('saving');
+    const sheetIds = Array.from(new Set([sheetId, 'account_data', 'client_data', 'merchant_data']));
+    const { data, error } = await supabase
+        .from('custom_sheets_data')
+        .select('*')
+        .in('sheet_id', sheetIds);
+
+    if (error) { status('error'); throw error; }
+
+    const rows = {};
+    (data || []).forEach(row => {
+        rows[row.sheet_id] = Array.isArray(row.records) ? row.records : [];
+    });
+
+    const nowIso = new Date().toISOString();
+    let targetRecord = null;
+    const targetRecords = (rows[sheetId] || []).map(record => {
+        if (String(record.id) !== String(recordId)) return record;
+        targetRecord = record;
+        return {
+            ...record,
+            renewalStatus: 'not_renewed',
+            nonRenewedAt: nowIso,
+            releasedAccountAt: nowIso,
+            notes: [record.notes, 'Not renewed - password reset and account returned to stock'].filter(Boolean).join(' | '),
+            updated_at: nowIso
+        };
+    });
+
+    if (!targetRecord) throw new Error('Subscription record was not found');
+
+    const activeSales = [
+        ...(sheetId === 'client_data' ? targetRecords : (rows.client_data || [])),
+        ...(sheetId === 'merchant_data' ? targetRecords : (rows.merchant_data || []))
+    ];
+
+    const getRemainingUsesForAccount = (account) => activeSales.reduce((total, sale) => {
+        if (sale.deletedAt || sale.renewalStatus === 'not_renewed' || sale.nonRenewedAt) return total;
+        if (!matchesAccountRecord(account, sale)) return total;
+        return total + (isPersonalSaleRecord(sale) ? 2 : 1);
+    }, 0);
+
+    const updatedAccountRows = (rows.account_data || []).map(account => {
+        if (!matchesAccountRecord(account, targetRecord)) return account;
+        const remainingUses = getRemainingUsesForAccount(account);
+        const shouldResetPassword = remainingUses <= 0 && String(newPassword || '').trim();
+        return {
+            ...account,
+            ...(shouldResetPassword ? { password2: String(newPassword).trim() } : {}),
+            currentUses: remainingUses,
+            accountUsageStatus: remainingUses <= 0 ? 'available_reused_after_expiry' : account.accountUsageStatus,
+            reusedAfterExpiry: true,
+            releasedAccountAt: nowIso,
+            lastReleasedFromCustomer: targetRecord.email || targetRecord.name || targetRecord.id || '',
+            notes: [account.notes, remainingUses <= 0 ? 'Reused after expired subscription without renewal' : 'One device returned after customer did not renew'].filter(Boolean).join(' | '),
+            updated_at: nowIso
+        };
+    });
+    const recalculatedAccounts = recalculateAccountUsage(updatedAccountRows, activeSales).map(account => (
+        account.reusedAfterExpiry
+            ? { ...account, accountUsageStatus: account.currentUses > 0 ? account.accountUsageStatus : 'available_reused_after_expiry' }
+            : account
+    ));
+
+    const { error: upsertError } = await supabase.from('custom_sheets_data').upsert([
+        { sheet_id: sheetId, records: targetRecords, updated_at: nowIso },
+        { sheet_id: 'account_data', records: recalculatedAccounts, updated_at: nowIso }
+    ]);
+
+    if (upsertError) { status('error'); throw upsertError; }
+
+    status('saved');
+    notifySheets();
+    if (channel) {
+        try { await channel.send({ type: 'broadcast', event: 'changed', payload: {} }); } catch {}
+    }
+
+    return { record: targetRecord, accounts: recalculatedAccounts };
+}
 export async function syncAccountUsageFromCloudSheets(extraRows = {}) {
-    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
 
     const sheetIds = ['account_data', 'client_data', 'merchant_data'];
     const { data, error } = await supabase
@@ -148,7 +238,7 @@ export async function syncAccountUsageFromCloudSheets(extraRows = {}) {
 }
 
 export async function sellCloudAccount(record, accountId, targetSheetId = 'client_data') {
-    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
     status('saving');
 
     // 1. Fetch current target sheet and account_data rows
@@ -238,3 +328,7 @@ export function startSheetSync() {
         channel = null;
     };
 }
+
+
+
+

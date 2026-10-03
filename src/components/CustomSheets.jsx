@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
@@ -51,13 +51,106 @@ const CalendarOptionIcon = ({ num = null, isSelected = false }) => {
 };
 
 const DURATION_ITEMS = [
-    { label: '1 شهر (30 يوم)', value: '1 شهر', num: 1 },
-    { label: '2 شهر (60 يوم)', value: '2 شهر', num: 2 },
-    { label: '3 شهور (90 يوم)', value: '3 شهور', num: 3 },
-    { label: '4 شهور (120 يوم)', value: '4 شهور', num: 4 },
-    { label: '6 شهور (180 يوم)', value: '6 شهور', num: 6 },
-    { label: '1 سنة (365 يوم)', value: '1 سنة', num: 12 },
+    { label: '1 Ø´Ù‡Ø± (30 ÙŠÙˆÙ…)', value: '1 Ø´Ù‡Ø±', num: 1 },
+    { label: '2 Ø´Ù‡Ø± (60 ÙŠÙˆÙ…)', value: '2 Ø´Ù‡Ø±', num: 2 },
+    { label: '3 Ø´Ù‡ÙˆØ± (90 ÙŠÙˆÙ…)', value: '3 Ø´Ù‡ÙˆØ±', num: 3 },
+    { label: '4 Ø´Ù‡ÙˆØ± (120 ÙŠÙˆÙ…)', value: '4 Ø´Ù‡ÙˆØ±', num: 4 },
+    { label: '6 Ø´Ù‡ÙˆØ± (180 ÙŠÙˆÙ…)', value: '6 Ø´Ù‡ÙˆØ±', num: 6 },
+    { label: '1 Ø³Ù†Ø© (365 ÙŠÙˆÙ…)', value: '1 Ø³Ù†Ø©', num: 12 },
 ];
+
+const ACCOUNT_CATEGORIES = [
+    { id: 'adobe', label: 'Adobe', icon: 'fa-palette', hint: 'Outlook + Adobe passwords' },
+    { id: 'capcut', label: 'CapCut', icon: 'fa-clapperboard', hint: 'Customer monthly renewals' },
+    { id: 'chatgpt_shared', label: 'ChatGPT Shared', icon: 'fa-comments', hint: 'Shared seats and renewal date' },
+];
+
+const getAccountCategory = (record) => record?.accountCategory || 'adobe';
+
+const isReusedAccount = (record) => {
+    const status = String(record?.accountUsageStatus || '').toLowerCase();
+    const notes = String(record?.notes || '').toLowerCase();
+    return Boolean(record?.reusedAfterExpiry)
+        || Boolean(record?.releasedAccountAt)
+        || status.includes('reused')
+        || notes.includes('reused after expired')
+        || notes.includes('returned to stock');
+};
+
+const parsePlainDate = (value) => {
+    if (!value) return null;
+    const s = String(value).trim().slice(0, 10);
+    const match = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+    if (!match) return null;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+};
+
+const formatPlainDate = (date) => {
+    if (!date || Number.isNaN(date.getTime())) return '';
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+const getTodayPlainDate = () => formatPlainDate(new Date());
+
+const calculateCapCutMonthlyReminder = (record) => {
+    if (getAccountCategory(record) !== 'capcut') {
+        return calculateAccountReminder(record?.accountCreatedDate, record?.reminderDays, record?.created_at);
+    }
+
+    const start = parsePlainDate(record.accountCreatedDate || record.created_at);
+    const months = Math.max(1, Number(record.capcutMonths || 1));
+    if (!start) return { text: '-', status: 'none', days: null, targetDate: '' };
+
+    const todayRaw = new Date();
+    const today = new Date(todayRaw.getFullYear(), todayRaw.getMonth(), todayRaw.getDate());
+    let target = null;
+    for (let i = 1; i <= months; i += 1) {
+        const d = new Date(start.getFullYear(), start.getMonth() + i, start.getDate());
+        if (d >= today) {
+            target = d;
+            break;
+        }
+    }
+    if (!target) target = new Date(start.getFullYear(), start.getMonth() + months, start.getDate());
+
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const targetDate = formatPlainDate(target);
+    const createdDate = formatPlainDate(start);
+    if (diffDays < 0) return { text: `CapCut renewal overdue (${Math.abs(diffDays)} days)`, status: 'expired', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+    if (diffDays === 0) return { text: 'CapCut monthly renewal today', status: 'expiring-today', days: 0, targetDate, createdDate, reminderDays: 30 };
+    if (diffDays <= 3) return { text: `CapCut monthly renewal in ${diffDays} days`, status: 'urgent', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+    return { text: `CapCut monthly renewal in ${diffDays} days`, status: 'active', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+};
+
+const calculateChatGPTMonthlyReminder = (record) => {
+    if (getAccountCategory(record) !== 'chatgpt_shared') {
+        return calculateAccountReminder(record?.accountCreatedDate, record?.reminderDays, record?.created_at);
+    }
+
+    const start = parsePlainDate(record.accountCreatedDate || record.startDate || record.created_at);
+    if (!start) return { text: '-', status: 'none', days: null, targetDate: '' };
+
+    const todayRaw = new Date();
+    const today = new Date(todayRaw.getFullYear(), todayRaw.getMonth(), todayRaw.getDate());
+    let target = new Date(start.getFullYear(), start.getMonth() + 1, start.getDate());
+    while (target < today) {
+        target = new Date(target.getFullYear(), target.getMonth() + 1, target.getDate());
+    }
+
+    const diffDays = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const targetDate = formatPlainDate(target);
+    const createdDate = formatPlainDate(start);
+    if (diffDays < 0) return { text: `ChatGPT renewal overdue (${Math.abs(diffDays)} days)`, status: 'expired', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+    if (diffDays === 0) return { text: 'ChatGPT renewal today', status: 'expiring-today', days: 0, targetDate, createdDate, reminderDays: 30 };
+    if (diffDays <= 3) return { text: `ChatGPT renewal in ${diffDays} days`, status: 'urgent', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+    return { text: `ChatGPT renewal in ${diffDays} days`, status: 'active', days: diffDays, targetDate, createdDate, reminderDays: 30 };
+};
+
+const getAccountReminder = (record) => {
+    if (getAccountCategory(record) === 'capcut') return calculateCapCutMonthlyReminder(record);
+    if (getAccountCategory(record) === 'chatgpt_shared') return calculateChatGPTMonthlyReminder(record);
+    return calculateAccountReminder(record?.accountCreatedDate, record?.reminderDays, record?.created_at);
+};
 
 /**
  * Calculates accurate remaining subscription duration from start date and duration string
@@ -68,8 +161,8 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
         return { text: '-', status: 'none', days: null };
     }
 
-    if (duration.includes('مدى الحياة') || duration.toLowerCase().includes('lifetime')) {
-        return { text: 'مدى الحياة', status: 'lifetime', days: 999999, label: '∞' };
+    if (duration.includes('Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©') || duration.toLowerCase().includes('lifetime')) {
+        return { text: 'Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©', status: 'lifetime', days: 999999, label: 'âˆž' };
     }
 
     const effectiveDateStr = rawStartDate || (rawCreatedAt ? String(rawCreatedAt).slice(0, 10) : '');
@@ -96,13 +189,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     const end = new Date(start.getFullYear(), start.getMonth(), start.getDate());
 
-    if (duration.includes('سنة') || duration.includes('سنوات') || duration.toLowerCase().includes('year')) {
+    if (duration.includes('Ø³Ù†Ø©') || duration.includes('Ø³Ù†ÙˆØ§Øª') || duration.toLowerCase().includes('year')) {
         const num = parseInt(duration) || 1;
         end.setFullYear(end.getFullYear() + num);
-    } else if (duration.includes('شهر') || duration.includes('شهور') || duration.toLowerCase().includes('month')) {
+    } else if (duration.includes('Ø´Ù‡Ø±') || duration.includes('Ø´Ù‡ÙˆØ±') || duration.toLowerCase().includes('month')) {
         const num = parseInt(duration) || 1;
         end.setDate(end.getDate() + (num * 30));
-    } else if (duration.includes('يوم') || duration.toLowerCase().includes('day')) {
+    } else if (duration.includes('ÙŠÙˆÙ…') || duration.toLowerCase().includes('day')) {
         const num = parseInt(duration) || 30;
         end.setDate(end.getDate() + num);
     } else {
@@ -130,7 +223,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
     if (diffDays < 0) {
         const absDays = Math.abs(diffDays);
         return {
-            text: absDays === 1 ? 'منتهي أمس' : `منتهي (منذ ${absDays} يوم)`,
+            text: absDays === 1 ? 'Ù…Ù†ØªÙ‡ÙŠ Ø£Ù…Ø³' : `Ù…Ù†ØªÙ‡ÙŠ (Ù…Ù†Ø° ${absDays} ÙŠÙˆÙ…)`,
             status: 'expired',
             days: diffDays,
             endDate: endFormatted,
@@ -140,7 +233,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 0) {
         return {
-            text: 'ينتهي اليوم',
+            text: 'ÙŠÙ†ØªÙ‡ÙŠ Ø§Ù„ÙŠÙˆÙ…',
             status: 'expiring-today',
             days: 0,
             endDate: endFormatted,
@@ -150,7 +243,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 1) {
         return {
-            text: 'متبقي يوم واحد',
+            text: 'Ù…ØªØ¨Ù‚ÙŠ ÙŠÙˆÙ… ÙˆØ§Ø­Ø¯',
             status: 'urgent',
             days: 1,
             endDate: endFormatted,
@@ -160,7 +253,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays < 30) {
         return {
-            text: `متبقي ${diffDays} يوم`,
+            text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} ÙŠÙˆÙ…`,
             status: diffDays <= 3 ? 'urgent' : (diffDays <= 7 ? 'warning' : 'active'),
             days: diffDays,
             endDate: endFormatted,
@@ -173,13 +266,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     let text = '';
     if (months === 1) {
-        text = remDays > 0 ? `متبقي شهر و ${remDays} يوم` : 'متبقي شهر';
+        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±';
     } else if (months === 2) {
-        text = remDays > 0 ? `متبقي شهرين و ${remDays} يوم` : 'متبقي شهرين';
+        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ† Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ†';
     } else if (months >= 3 && months <= 10) {
-        text = remDays > 0 ? `متبقي ${months} شهور و ${remDays} يوم` : `متبقي ${months} شهور`;
+        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ±`;
     } else {
-        text = remDays > 0 ? `متبقي ${months} شهر و ${remDays} يوم` : `متبقي ${months} شهر`;
+        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø±`;
     }
 
     return {
@@ -232,8 +325,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [offerReminderFilter, setOfferReminderFilter] = useState('all'); // account_data only: all, pending, near3, today, overdue
     const [isAlertsExpanded, setIsAlertsExpanded] = useState(true);
     const [paymentFilter, setPaymentFilter] = useState('all'); // advanced: all, paid, unpaid
-    const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, جهاز, جهازين
+    const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, Ø¬Ù‡Ø§Ø², Ø¬Ù‡Ø§Ø²ÙŠÙ†
+    const [renewalFilter, setRenewalFilter] = useState('all');
+    const [accountStockFilter, setAccountStockFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -258,14 +354,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
-        contactChannel: 'واتساب',
+        contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
         email: '',
         password: '',
         password2: '',
         duration: '',
         startDate: '',
-        deviceType: 'مشترك',
-        paymentStatus: 'مدفوع',
+        deviceType: 'Ù…Ø´ØªØ±Ùƒ',
+        paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
         selectedAccount: '',
         invoiceNumber: '',
         visa: '',
@@ -274,7 +370,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         accountCreatedDate: '',
         reminderDays: '20',
         offerActivated: false,
-        offerActivatedAt: ''
+        offerActivatedAt: '',
+        accountCategory: 'adobe',
+        capcutMode: '',
+        capcutGiftUsed: false,
+        capcutMonthlyReminder: false,
+        capcutMonths: 1,
+        sharedUsers: 1,
+        renewalDate: '',
+        twoFaLink: ''
     });
     const [accountEntryMode, setAccountEntryMode] = useState('available');
     const [availableAccountSearch, setAvailableAccountSearch] = useState('');
@@ -376,6 +480,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setCurrentPage(1);
         setSearchTerm('');
         setExpiryFilter('all');
+        setRenewalFilter('all');
+        setAccountStockFilter('all');
     }, [currentSheetId]);
 
     // Save records to LocalStorage & Supabase cloud
@@ -398,7 +504,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             return true;
         } catch (e) {
             console.error('Error saving data:', e);
-            showToast('حدث خطأ أثناء حفظ البيانات', 'error');
+            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª', 'error');
             return false;
         }
     };
@@ -413,6 +519,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const availableAccountChoices = useMemo(() => {
         return availableAccounts
             .filter(acc => {
+                if (getAccountCategory(acc) !== 'adobe') return false;
                 const maxUses = Math.max(1, Number(acc.maxUses || 2));
                 const currentUses = Math.max(0, Number(acc.currentUses || 0));
                 return currentUses < maxUses;
@@ -460,6 +567,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const emailA = String(accA.email || accA.selectedAccount || '');
                 const emailB = String(accB.email || accB.selectedAccount || '');
 
+                const currentUsesA = Math.max(0, Number(accA.currentUses || 0));
+                const currentUsesB = Math.max(0, Number(accB.currentUses || 0));
+                const maxUsesA = Math.max(1, Number(accA.maxUses || 2));
+                const maxUsesB = Math.max(1, Number(accB.maxUses || 2));
+                const remainingA = Math.max(0, maxUsesA - currentUsesA);
+                const remainingB = Math.max(0, maxUsesB - currentUsesB);
+                const availabilityRank = (currentUsesA - currentUsesB) || (remainingB - remainingA);
+                if (availabilityRank) return availabilityRank;
+
                 if (availableAccountSort === 'email') {
                     return emailA.localeCompare(emailB) || (a.index - b.index);
                 }
@@ -495,9 +611,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     const handleSetDeviceType = (type) => {
-        const nextType = type === 'شخصي' ? 'شخصي' : 'مشترك';
+        const nextType = type === 'Ø´Ø®ØµÙŠ' ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ';
         setFormData(prev => {
-            if (nextType === 'شخصي' && prev.selectedAccount) {
+            if (nextType === 'Ø´Ø®ØµÙŠ' && prev.selectedAccount) {
                 const account = availableAccounts.find(acc => {
                     const selectedValue = String(prev.selectedAccount || '').toLowerCase();
                     return String(acc.email || '').toLowerCase() === selectedValue
@@ -506,8 +622,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const maxUses = Math.max(1, Number(account?.maxUses || 2));
                 const currentUses = Math.max(0, Number(account?.currentUses || 0));
                 if (account && (currentUses > 0 || maxUses < 2)) {
-                    showToast('تم إلغاء اختيار الحساب لأن الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (جهازين)', 'warning');
-                    return { ...prev, deviceType: 'شخصي', selectedAccount: '' };
+                    showToast('ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„Ø£Ù† Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ ÙŠØªØ·Ù„Ø¨ Ø­Ø³Ø§Ø¨Ø§Ù‹ Ù…ØªØ§Ø­Ø§Ù‹ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ (Ø¬Ù‡Ø§Ø²ÙŠÙ†)', 'warning');
+                    return { ...prev, deviceType: 'Ø´Ø®ØµÙŠ', selectedAccount: '' };
                 }
             }
             return { ...prev, deviceType: nextType };
@@ -527,18 +643,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     // Copy helper with feedback
     const handleCopy = (text, key) => {
         if (!text) {
-            showToast('لا توجد بيانات للنسخ', 'warning');
+            showToast('Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª Ù„Ù„Ù†Ø³Ø®', 'warning');
             return;
         }
         navigator.clipboard.writeText(text);
         setCopiedField(key);
-        showToast('تم النسخ إلى الحافظة بنجاح ✓', 'success');
+        showToast('ØªÙ… Ø§Ù„Ù†Ø³Ø® Ø¥Ù„Ù‰ Ø§Ù„Ø­Ø§ÙØ¸Ø© Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
         setTimeout(() => setCopiedField(null), 1500);
     };
 
     const handleCopyAdobeAccess = (rec) => {
         if (!rec?.email) {
-            showToast('يجب وجود الإيميل للنسخ', 'warning');
+            showToast('ÙŠØ¬Ø¨ ÙˆØ¬ÙˆØ¯ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù„Ù„Ù†Ø³Ø®', 'warning');
             return;
         }
 
@@ -547,25 +663,40 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             : 'Service2030@';
 
         const message = [
-            '┌──────────────────────────┐',
-            '│          🎨 Adobe Creative Cloud  ',
-            '└──────────────────────────┘',
+            'â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”',
+            'â”‚          ðŸŽ¨ Adobe Creative Cloud  ',
+            'â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜',
             '',
-            `📧 Adobe Mail : ${rec.email}`,
-            `🔑 Adobe Password : ${adobePassword}`,
+            `ðŸ“§ Adobe Mail : ${rec.email}`,
+            `ðŸ”‘ Adobe Password : ${adobePassword}`,
             '',
-            '━━━━━━━━━',
-            '⚠️ ملحوظه هامة جداً ‼️',
+            'â”â”â”â”â”â”â”â”â”',
+            'âš ï¸ Ù…Ù„Ø­ÙˆØ¸Ù‡ Ù‡Ø§Ù…Ø© Ø¬Ø¯Ø§Ù‹ â€¼ï¸',
             '',
-            '🚫 ممنوع تغيير أي بيانات أو',
-            '   باسورد في حساب Adobe أو',
-            '   تعديل أي إعدادات خاصة بالحساب.',
+            'ðŸš« Ù…Ù…Ù†ÙˆØ¹ ØªØºÙŠÙŠØ± Ø£ÙŠ Ø¨ÙŠØ§Ù†Ø§Øª Ø£Ùˆ',
+            '   Ø¨Ø§Ø³ÙˆØ±Ø¯ ÙÙŠ Ø­Ø³Ø§Ø¨ Adobe Ø£Ùˆ',
+            '   ØªØ¹Ø¯ÙŠÙ„ Ø£ÙŠ Ø¥Ø¹Ø¯Ø§Ø¯Ø§Øª Ø®Ø§ØµØ© Ø¨Ø§Ù„Ø­Ø³Ø§Ø¨.',
             '',
-            ' في حالة تغيير أي بيانات،',
-            '   الحساب هيفقد الضمان والاشتراك.',
+            ' ÙÙŠ Ø­Ø§Ù„Ø© ØªØºÙŠÙŠØ± Ø£ÙŠ Ø¨ÙŠØ§Ù†Ø§ØªØŒ',
+            '   Ø§Ù„Ø­Ø³Ø§Ø¨ Ù‡ÙŠÙÙ‚Ø¯ Ø§Ù„Ø¶Ù…Ø§Ù† ÙˆØ§Ù„Ø§Ø´ØªØ±Ø§Ùƒ.',
         ].join('\n');
 
         handleCopy(message, `adobe_access_${rec.id}`);
+    };
+
+    const handleCopyChatGPTAccess = (rec) => {
+        if (!rec?.email) {
+            showToast('ÙŠØ¬Ø¨ ÙˆØ¬ÙˆØ¯ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù„Ù„Ù†Ø³Ø®', 'warning');
+            return;
+        }
+
+        const message = [
+            rec.email || '',
+            rec.password || '',
+            rec.twoFaLink || ''
+        ].filter(Boolean).join('\n');
+
+        handleCopy(message, `chatgpt_access_${rec.id}`);
     };
 
     // Toggle Secret Visibility
@@ -581,54 +712,58 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (isClientOrMerchant) {
             if (!editingRecord && currentSheetId === 'client_data' && accountEntryMode === 'available' && !findSelectedAvailableAccount()) {
-                showToast('يرجى اختيار ميل متاح من بيانات الحساب', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ù…ÙŠÙ„ Ù…ØªØ§Ø­ Ù…Ù† Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨', 'warning');
                 return;
             }
             if (!formData.email.trim()) {
-                showToast('يرجى إدخال البريد الإلكتروني', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ', 'warning');
                 return;
             }
             if (!formData.duration) {
-                showToast('يرجى اختيار مدة الاشتراك', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ', 'warning');
                 return;
             }
             const selected = findSelectedAvailableAccount();
-            const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+            const isPersonalChosen = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
             if (!editingRecord && accountEntryMode === 'available' && selected && isPersonalChosen && Number(selected.currentUses) > 0) {
-                showToast('الحساب المختار مستخدم منه جهاز بالفعل، لا يمكن بيعه كاشتراك شخصي (جهازين). يرجى اختيار حساب متاح كامل أو تغيير الاشتراك إلى مشترك.', 'warning');
+                showToast('Ø§Ù„Ø­Ø³Ø§Ø¨ Ø§Ù„Ù…Ø®ØªØ§Ø± Ù…Ø³ØªØ®Ø¯Ù… Ù…Ù†Ù‡ Ø¬Ù‡Ø§Ø² Ø¨Ø§Ù„ÙØ¹Ù„ØŒ Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø¨ÙŠØ¹Ù‡ ÙƒØ§Ø´ØªØ±Ø§Ùƒ Ø´Ø®ØµÙŠ (Ø¬Ù‡Ø§Ø²ÙŠÙ†). ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø­Ø³Ø§Ø¨ Ù…ØªØ§Ø­ ÙƒØ§Ù…Ù„ Ø£Ùˆ ØªØºÙŠÙŠØ± Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø¥Ù„Ù‰ Ù…Ø´ØªØ±Ùƒ.', 'warning');
                 return;
             }
         } else if (currentSheetId === 'account_data') {
             if (!formData.email && !formData.password && !formData.password2) {
-                showToast('يرجى إدخال البريد الإلكتروني أو كلمة المرور على الأقل', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ø£Ùˆ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„', 'warning');
                 return;
             }
         } else if (currentSheetId === 'reminders_data') {
             if (!formData.email && !formData.notes) {
-                showToast('يرجى كتابة عنوان أو تفاصيل التذكير', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ ÙƒØªØ§Ø¨Ø© Ø¹Ù†ÙˆØ§Ù† Ø£Ùˆ ØªÙØ§ØµÙŠÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±', 'warning');
                 return;
             }
         } else {
             if (!formData.email && !formData.invoiceNumber && !formData.visa && !formData.selectedAccount) {
-                showToast('يرجى إدخال البريد الإلكتروني أو رقم الفاتورة أو بيانات الحساب على الأقل', 'warning');
+                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ø£Ùˆ Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø© Ø£Ùˆ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„', 'warning');
                 return;
             }
         }
 
-        const isPersonalSelection = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+        const isPersonalSelection = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+        const accountCategory = formData.accountCategory || activeAccountCategory || 'adobe';
+        const sharedUsers = Math.max(1, Number(formData.sharedUsers || 1));
+        const capcutMonths = Math.max(1, Number(formData.capcutMonths || 2));
+        const accountCreatedDate = formData.accountCreatedDate || new Date().toISOString().slice(0, 10);
         const cleanPayload = isClientOrMerchant ? {
             name: formData.name || '',
             phone: formData.phone || '',
-            contactChannel: formData.contactChannel || 'واتساب',
+            contactChannel: formData.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨',
             email: formData.email,
             password: formData.password,
             password2: formData.password2 || 'Service2030@',
             duration: formData.duration,
             startDate: formData.startDate || '',
-            deviceType: isPersonalSelection ? 'شخصي' : 'مشترك',
+            deviceType: isPersonalSelection ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ',
             accountUsageMode: isPersonalSelection ? 'personal' : 'shared_one_device',
             saleType: isPersonalSelection ? 'personal' : 'shared_one_device',
-            paymentStatus: formData.paymentStatus || 'مدفوع',
+            paymentStatus: formData.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
             selectedAccount: formData.selectedAccount || '',
             notes: formData.notes,
             invoiceNumber: '',
@@ -639,33 +774,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         } : currentSheetId === 'account_data' ? {
             email: formData.email,
             password: formData.password,
-            password2: formData.password2 || 'Service2030@',
+            password2: accountCategory === 'adobe' ? (formData.password2 || 'Service2030@') : '',
             invoiceNumber: formData.invoiceNumber || '',
             visa: formData.visa || '',
             visaAccount: formData.visaAccount || '',
-            duration: '',
-            startDate: '',
+            duration: accountCategory === 'capcut' ? `${capcutMonths} months` : '',
+            startDate: accountCategory === 'capcut' || accountCategory === 'chatgpt_shared' ? accountCreatedDate : '',
             deviceType: '',
             paymentStatus: '',
             selectedAccount: '',
             notes: formData.notes,
-            accountCreatedDate: formData.accountCreatedDate || new Date().toISOString().slice(0, 10),
-            reminderDays: formData.reminderDays || '20',
-            currentUses: editingRecord?.currentUses || 0,
-            maxUses: editingRecord?.maxUses || 2,
-            accountUsageStatus: editingRecord?.accountUsageStatus || '',
-            offerActivated: editingRecord?.offerActivated || false,
-            offerActivatedAt: editingRecord?.offerActivatedAt || ''
+            accountCreatedDate,
+            reminderDays: accountCategory === 'capcut' || accountCategory === 'chatgpt_shared' ? '30' : (formData.reminderDays || '20'),
+            currentUses: accountCategory === 'capcut' ? 1 : (accountCategory === 'chatgpt_shared' ? sharedUsers : (editingRecord?.currentUses || 0)),
+            maxUses: accountCategory === 'chatgpt_shared' ? sharedUsers : (accountCategory === 'capcut' ? 1 : (editingRecord?.maxUses || 2)),
+            accountUsageStatus: accountCategory === 'capcut' ? 'personal_full' : (editingRecord?.accountUsageStatus || ''),
+            offerActivated: accountCategory === 'adobe' ? (editingRecord?.offerActivated || false) : false,
+            offerActivatedAt: accountCategory === 'adobe' ? (editingRecord?.offerActivatedAt || '') : '',
+            accountCategory,
+            capcutMode: '',
+            capcutGiftUsed: false,
+            capcutMonthlyReminder: accountCategory === 'capcut',
+            capcutMonths: accountCategory === 'capcut' ? capcutMonths : '',
+            sharedUsers: accountCategory === 'chatgpt_shared' ? sharedUsers : '',
+            renewalDate: '',
+            twoFaLink: accountCategory === 'chatgpt_shared' ? (formData.twoFaLink || '') : ''
         } : currentSheetId === 'reminders_data' ? {
-            email: formData.email || 'تذكير بدون عنوان',
-            password: formData.password || 'متوسط',
+            email: formData.email || 'ØªØ°ÙƒÙŠØ± Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†',
+            password: formData.password || 'Ù…ØªÙˆØ³Ø·',
             password2: 'Service2030@',
             invoiceNumber: '',
             visa: '',
             visaAccount: '',
             duration: '',
             startDate: formData.accountCreatedDate || formData.startDate || new Date().toISOString().slice(0, 10),
-            deviceType: formData.deviceType || 'تذكير عام',
+            deviceType: formData.deviceType || 'ØªØ°ÙƒÙŠØ± Ø¹Ø§Ù…',
             paymentStatus: '',
             selectedAccount: '',
             notes: formData.notes || '',
@@ -708,7 +851,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return item;
             });
             if (!await saveRecords(updated)) return;
-            showToast('تم تعديل البيانات بنجاح ✓', 'success');
+            showToast('ØªÙ… ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
         } else {
             // Add new
             const newRecord = {
@@ -721,7 +864,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const selectedAcc = findSelectedAvailableAccount();
                 await sellCloudAccount(newRecord, selectedAcc?.id, currentSheetId);
             } else if (!await saveRecords([newRecord, ...records])) return;
-            showToast('تم إضافة السجل الجديد بنجاح ✓', 'success');
+            showToast('ØªÙ… Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ø¬Ø¯ÙŠØ¯ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
         }
 
         setShowAddModal(false);
@@ -730,27 +873,35 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setFormData({
             name: '',
             phone: '',
-            contactChannel: 'واتساب',
+            contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
             email: '',
             password: '',
             password2: '',
             duration: '',
             startDate: '',
-            deviceType: 'مشترك',
-            paymentStatus: 'مدفوع',
+            deviceType: 'Ù…Ø´ØªØ±Ùƒ',
+            paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
             selectedAccount: '',
             invoiceNumber: '',
             visa: '',
             visaAccount: '',
             notes: '',
-            accountCreatedDate: '',
-            reminderDays: '20',
+            accountCreatedDate: activeAccountCategory === 'capcut' || activeAccountCategory === 'chatgpt_shared' ? new Date().toISOString().slice(0, 10) : '',
+            reminderDays: activeAccountCategory === 'chatgpt_shared' ? '30' : '20',
             offerActivated: false,
-            offerActivatedAt: ''
+            offerActivatedAt: '',
+            accountCategory: activeAccountCategory,
+            capcutMode: '',
+            capcutGiftUsed: false,
+            capcutMonthlyReminder: activeAccountCategory === 'capcut',
+            capcutMonths: activeAccountCategory === 'capcut' ? 2 : 1,
+            sharedUsers: 1,
+            renewalDate: '',
+            twoFaLink: ''
         });
         } catch (err) {
             console.error('Error saving record/sale:', err);
-            showToast('تعذر حفظ البيع: ' + (err?.message || 'تأكد من اتصال قاعدة البيانات وتوفر الحساب'), 'error');
+            showToast('ØªØ¹Ø°Ø± Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ¹: ' + (err?.message || 'ØªØ£ÙƒØ¯ Ù…Ù† Ø§ØªØµØ§Ù„ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ÙˆØªÙˆÙØ± Ø§Ù„Ø­Ø³Ø§Ø¨'), 'error');
         } finally { setIsSaving(false); }
     };
 
@@ -762,14 +913,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setFormData({
             name: rec.name || '',
             phone: rec.phone || '',
-            contactChannel: rec.contactChannel || 'واتساب',
+            contactChannel: rec.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨',
             email: rec.email || '',
-            password: rec.password || '',
-            password2: rec.password2 || '',
+            password: getAccountCategory(rec) === 'chatgpt_shared' ? (rec.password || rec.password2 || '') : (rec.password || ''),
+            password2: getAccountCategory(rec) === 'chatgpt_shared' ? '' : (rec.password2 || ''),
             duration: rec.duration || '',
             startDate: rec.startDate || rec.date || '',
-            deviceType: (rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين') ? 'شخصي' : 'مشترك',
-            paymentStatus: rec.paymentStatus || 'مدفوع',
+            deviceType: (rec.deviceType === 'Ø´Ø®ØµÙŠ' || rec.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†') ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ',
+            paymentStatus: rec.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
             selectedAccount: rec.selectedAccount || '',
             invoiceNumber: rec.invoiceNumber || '',
             visa: rec.visa || '',
@@ -778,7 +929,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             accountCreatedDate: rec.accountCreatedDate || '',
             reminderDays: rec.reminderDays || '',
             offerActivated: rec.offerActivated || false,
-            offerActivatedAt: rec.offerActivatedAt || ''
+            offerActivatedAt: rec.offerActivatedAt || '',
+            accountCategory: getAccountCategory(rec),
+            capcutMode: rec.capcutMode || '',
+            capcutGiftUsed: false,
+            capcutMonthlyReminder: getAccountCategory(rec) === 'capcut' || !!rec.capcutMonthlyReminder,
+            capcutMonths: rec.capcutMonths || (getAccountCategory(rec) === 'capcut' ? 2 : 1),
+            sharedUsers: rec.sharedUsers || rec.maxUses || 1,
+            renewalDate: rec.renewalDate || '',
+            twoFaLink: rec.twoFaLink || ''
         });
         setShowAddModal(true);
     };
@@ -808,10 +967,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const handleDeleteRecord = async (id) => {
         if (isTrashSheet) {
             const confirmed = await showConfirm({
-                title: 'حذف السجل نهائياً',
-                message: 'هل أنت متأكد من حذف هذا السجل نهائياً؟ لن يمكنك استعادته مرة أخرى.',
-                confirmText: 'نعم، احذف',
-                cancelText: 'إلغاء',
+                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹',
+                message: 'Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø­Ø°Ù Ù‡Ø°Ø§ Ø§Ù„Ø³Ø¬Ù„ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ØŸ Ù„Ù† ÙŠÙ…ÙƒÙ†Ùƒ Ø§Ø³ØªØ¹Ø§Ø¯ØªÙ‡ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.',
+                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
+                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
                 type: 'danger'
             });
             if (!confirmed) return;
@@ -821,27 +980,27 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const newSelected = new Set(selectedIds);
             newSelected.delete(id);
             setSelectedIds(newSelected);
-            showToast('تم الحذف النهائي للسجل بنجاح', 'info');
+            showToast('ØªÙ… Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù„Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­', 'info');
         } else {
             const confirmed = await showConfirm({
-                title: 'حذف السجل',
-                message: 'هل تريد حذف هذا السجل ونقله إلى سلة المهملات؟',
-                confirmText: 'نعم، احذف',
-                cancelText: 'إلغاء',
+                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„',
+                message: 'Ù‡Ù„ ØªØ±ÙŠØ¯ Ø­Ø°Ù Ù‡Ø°Ø§ Ø§Ù„Ø³Ø¬Ù„ ÙˆÙ†Ù‚Ù„Ù‡ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§ØªØŸ',
+                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
+                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
                 type: 'danger'
             });
             if (!confirmed) return;
 
             const targetRecord = records.find(r => r.id === id);
             if (targetRecord) {
-                await moveToTrash([targetRecord], currentSheetId, currentSheet?.name || 'شيت');
+                await moveToTrash([targetRecord], currentSheetId, currentSheet?.name || 'Ø´ÙŠØª');
             }
             const updated = records.filter(r => r.id !== id);
             await saveRecords(updated);
             const newSelected = new Set(selectedIds);
             newSelected.delete(id);
             setSelectedIds(newSelected);
-            showToast('تم نقل السجل إلى سلة المهملات بنجاح ✓', 'success');
+            showToast('ØªÙ… Ù†Ù‚Ù„ Ø§Ù„Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
         }
     };
 
@@ -869,11 +1028,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             newSelected.delete(recordToRestore.id);
             setSelectedIds(newSelected);
 
-            const destName = recordToRestore.originSheetName || sheetsList.find(s => s.id === targetSheetId)?.name || 'الشيت الأصلي';
-            showToast(`تم استرداد السجل بنجاح إلى "${destName}" ✓`, 'success');
+            const destName = recordToRestore.originSheetName || sheetsList.find(s => s.id === targetSheetId)?.name || 'Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ';
+            showToast(`ØªÙ… Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ Ø¥Ù„Ù‰ "${destName}" âœ“`, 'success');
         } catch (err) {
             console.error('Error restoring record:', err);
-            showToast('حدث خطأ أثناء استرداد السجل', 'error');
+            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„', 'error');
         }
     };
 
@@ -906,10 +1065,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const updatedTrash = records.filter(r => !selectedIds.has(r.id));
             await saveRecords(updatedTrash);
             setSelectedIds(new Set());
-            showToast(`تم استرداد ${selectedRecords.length} سجل بنجاح إلى شيتاتها الأصلية ✓`, 'success');
+            showToast(`ØªÙ… Ø§Ø³ØªØ±Ø¯Ø§Ø¯ ${selectedRecords.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ Ø¥Ù„Ù‰ Ø´ÙŠØªØ§ØªÙ‡Ø§ Ø§Ù„Ø£ØµÙ„ÙŠØ© âœ“`, 'success');
         } catch (err) {
             console.error('Error in bulk restore:', err);
-            showToast('حدث خطأ أثناء استرداد السجلات', 'error');
+            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„Ø§Øª', 'error');
         }
     };
 
@@ -917,30 +1076,30 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const handleEmptyTrash = async () => {
         if (records.length === 0) return;
         const confirmed = await showConfirm({
-            title: 'إفراغ سلة المهملات',
-            message: 'تحذير: هل أنت متأكد من رغبتك في إفراغ سلة المهملات بالكامل؟ سيتم حذف جميع السجلات نهائياً ولا يمكن التراجع.',
-            confirmText: 'نعم، إفراغ المهملات',
-            cancelText: 'إلغاء',
+            title: 'Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
+            message: 'ØªØ­Ø°ÙŠØ±: Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø±ØºØ¨ØªÙƒ ÙÙŠ Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ØŸ Ø³ÙŠØªÙ… Ø­Ø°Ù Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ ÙˆÙ„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹.',
+            confirmText: 'Ù†Ø¹Ù…ØŒ Ø¥ÙØ±Ø§Øº Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
+            cancelText: 'Ø¥Ù„ØºØ§Ø¡',
             type: 'danger'
         });
         if (!confirmed) return;
 
         saveRecords([]);
         setSelectedIds(new Set());
-        showToast('تم إفراغ سلة المهملات بالكامل بنجاح', 'info');
+        showToast('ØªÙ… Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ø¨Ù†Ø¬Ø§Ø­', 'info');
     };
 
     // Quick toggle payment status directly from table
     const handleTogglePaymentStatus = (id) => {
         const updated = records.map(r => {
             if (r.id === id) {
-                const nextStatus = r.paymentStatus === 'غير مدفوع' ? 'مدفوع' : 'غير مدفوع';
+                const nextStatus = r.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' ? 'Ù…Ø¯ÙÙˆØ¹' : 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹';
                 return { ...r, paymentStatus: nextStatus, updated_at: new Date().toISOString() };
             }
             return r;
         });
         saveRecords(updated);
-        showToast('تم تحديث حالة الدفع بنجاح ✓', 'success');
+        showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
     };
 
     const handleSetAccountUsage = async (id, uses, accountUsageStatus = '') => {
@@ -956,7 +1115,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 updated_at: new Date().toISOString()
             };
         });
-        if (await saveRecords(updated)) showToast('تم تحديث حالة بيع الحساب بنجاح ✓', 'success');
+        if (await saveRecords(updated)) showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø¨ÙŠØ¹ Ø§Ù„Ø­Ø³Ø§Ø¨ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+    };
+
+    const handleSetChatGPTUsers = async (id, users) => {
+        const updated = records.map(r => {
+            if (r.id !== id) return r;
+            const currentUses = Math.max(0, Number(users) || 0);
+            return {
+                ...r,
+                currentUses,
+                maxUses: Math.max(Number(r.maxUses || 0), currentUses, 1),
+                sharedUsers: Math.max(Number(r.sharedUsers || 0), currentUses, 1),
+                accountUsageStatus: currentUses <= 0 ? 'available' : 'shared_one_device',
+                updated_at: new Date().toISOString()
+            };
+        });
+        if (await saveRecords(updated)) showToast('ChatGPT user count updated', 'success');
+    };
+
+    const handleRenewChatGPTAccount = async (id) => {
+        const today = getTodayPlainDate();
+        const updated = records.map(r => {
+            if (r.id !== id) return r;
+            return {
+                ...r,
+                accountCreatedDate: today,
+                startDate: today,
+                renewalDate: '',
+                reminderDays: '30',
+                currentUses: 0,
+                accountUsageStatus: 'available',
+                updated_at: new Date().toISOString()
+            };
+        });
+        if (await saveRecords(updated)) showToast('ChatGPT renewed and user count reset', 'success');
     };
 
     const handleToggleOfferActivated = async (id) => {
@@ -970,7 +1163,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 updated_at: new Date().toISOString()
             };
         });
-        if (await saveRecords(updated)) showToast('تم تحديث حالة تفعيل العرض ✓', 'success');
+        if (await saveRecords(updated)) showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶ âœ“', 'success');
     };
 
     // Delete Selected Records (Bulk soft-delete or permanent delete)
@@ -978,10 +1171,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         if (selectedIds.size === 0) return;
         if (isTrashSheet) {
             const confirmed = await showConfirm({
-                title: 'حذف السجلات نهائياً',
-                message: `هل أنت متأكد من الحذف النهائي لـ ${selectedIds.size} سجل محدد؟ لن يمكن استعادتها.`,
-                confirmText: 'نعم، احذف',
-                cancelText: 'إلغاء',
+                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹',
+                message: `Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù€ ${selectedIds.size} Ø³Ø¬Ù„ Ù…Ø­Ø¯Ø¯ØŸ Ù„Ù† ÙŠÙ…ÙƒÙ† Ø§Ø³ØªØ¹Ø§Ø¯ØªÙ‡Ø§.`,
+                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
+                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
                 type: 'danger'
             });
             if (!confirmed) return;
@@ -989,23 +1182,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const updated = records.filter(r => !selectedIds.has(r.id));
             saveRecords(updated);
             setSelectedIds(new Set());
-            showToast(`تم الحذف النهائي لـ ${selectedIds.size} سجل بنجاح`, 'info');
+            showToast(`ØªÙ… Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù€ ${selectedIds.size} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­`, 'info');
         } else {
             const confirmed = await showConfirm({
-                title: 'نقل إلى سلة المهملات',
-                message: `هل أنت متأكد من نقل ${selectedIds.size} سجل محدد إلى سلة المهملات؟`,
-                confirmText: 'نعم، احذف',
-                cancelText: 'إلغاء',
+                title: 'Ù†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
+                message: `Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ù†Ù‚Ù„ ${selectedIds.size} Ø³Ø¬Ù„ Ù…Ø­Ø¯Ø¯ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§ØªØŸ`,
+                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
+                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
                 type: 'danger'
             });
             if (!confirmed) return;
 
             const targetRecords = records.filter(r => selectedIds.has(r.id));
-            await moveToTrash(targetRecords, currentSheetId, currentSheet?.name || 'شيت');
+            await moveToTrash(targetRecords, currentSheetId, currentSheet?.name || 'Ø´ÙŠØª');
             const updated = records.filter(r => !selectedIds.has(r.id));
             await saveRecords(updated);
             setSelectedIds(new Set());
-            showToast(`تم نقل ${targetRecords.length} سجل إلى سلة المهملات بنجاح ✓`, 'success');
+            showToast(`ØªÙ… Ù†Ù‚Ù„ ${targetRecords.length} Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
         }
     };
 
@@ -1065,7 +1258,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (newItems.length > 0) {
             saveRecords([...newItems, ...records]);
-            showToast(`تمت إضافة ${newItems.length} سجل بنجاح ✓`, 'success');
+            showToast(`ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© ${newItems.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
             setBulkText('');
             setShowBulkModal(false);
         }
@@ -1074,66 +1267,66 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     // Export to Excel
     const handleExportExcel = () => {
         if (records.length === 0) {
-            showToast('لا توجد بيانات لتصديرها', 'warning');
+            showToast('Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª Ù„ØªØµØ¯ÙŠØ±Ù‡Ø§', 'warning');
             return;
         }
 
         let dataToExport;
         if (isTrashSheet) {
             dataToExport = records.map((r, i) => ({
-                'م': i + 1,
-                'اسم العميل': r.name || '',
-                'رقم/يوزر التواصل': r.phone || '',
-                'وسيلة التواصل': r.contactChannel || '',
-                'البريد الإلكتروني (Email)': r.email || '',
+                'Ù…': i + 1,
+                'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„': r.name || '',
+                'Ø±Ù‚Ù…/ÙŠÙˆØ²Ø± Ø§Ù„ØªÙˆØ§ØµÙ„': r.phone || '',
+                'ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„': r.contactChannel || '',
+                'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
-                'الشيت الأصلي': r.originSheetName || '',
-                'بيانات الحساب (Account)': r.selectedAccount || '',
-                'تاريخ الحذف': r.deletedAt ? new Date(r.deletedAt).toLocaleString('ar-EG') : '',
-                'ملاحظات': r.notes || '',
-                'تاريخ الإضافة': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
+                'Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ': r.originSheetName || '',
+                'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)': r.selectedAccount || '',
+                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø­Ø°Ù': r.deletedAt ? new Date(r.deletedAt).toLocaleString('ar-EG') : '',
+                'Ù…Ù„Ø§Ø­Ø¸Ø§Øª': r.notes || '',
+                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
             }));
         } else if (isClientOrMerchant) {
             dataToExport = records.map((r, i) => ({
-                'م': i + 1,
-                'اسم العميل': r.name || '',
-                'رقم/يوزر التواصل': r.phone || '',
-                'وسيلة التواصل': r.contactChannel || '',
-                'البريد الإلكتروني (Email)': r.email || '',
+                'Ù…': i + 1,
+                'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„': r.name || '',
+                'Ø±Ù‚Ù…/ÙŠÙˆØ²Ø± Ø§Ù„ØªÙˆØ§ØµÙ„': r.phone || '',
+                'ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„': r.contactChannel || '',
+                'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
-                'مدة الاشتراك (Duration)': r.duration || '',
-                'تاريخ بداية الاشتراك (Start Date)': r.startDate || '',
-                'نوع الاشتراك (Device Type)': r.deviceType || 'جهاز',
-                'حالة الدفع (Payment Status)': r.paymentStatus || 'مدفوع',
-                'بيانات الحساب (Account)': r.selectedAccount || '',
-                'ملاحظات': r.notes || '',
-                'تاريخ الإضافة': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
+                'Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Duration)': r.duration || '',
+                'ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Start Date)': r.startDate || '',
+                'Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Device Type)': r.deviceType || 'Ø¬Ù‡Ø§Ø²',
+                'Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹ (Payment Status)': r.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
+                'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)': r.selectedAccount || '',
+                'Ù…Ù„Ø§Ø­Ø¸Ø§Øª': r.notes || '',
+                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
             }));
         } else {
             dataToExport = records.map((r, i) => {
                 const base = {
-                    'م': i + 1,
-                    'البريد الإلكتروني (Email)': r.email || '',
-                    'كلمة المرور 1 (Password)': r.password || '',
-                    'كلمة المرور 2 (Password 2)': r.password2 || '',
-                    'رقم الفاتورة (Invoice)': r.invoiceNumber || '',
-                    'الفيزا (Visa)': r.visa || '',
+                    'Ù…': i + 1,
+                    'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
+                    'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 1 (Password)': r.password || '',
+                    'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 2 (Password 2)': r.password2 || '',
+                    'Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø© (Invoice)': r.invoiceNumber || '',
+                    'Ø§Ù„ÙÙŠØ²Ø§ (Visa)': r.visa || '',
                     'Edu Mail': r.visaAccount || ''
                 };
                 if (currentSheetId === 'account_data') {
-                    const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
-                    base['تاريخ إنشاء الحساب (Creation Date)'] = r.accountCreatedDate || '';
-                    base['فترة التذكير بالأيام (Reminder Days)'] = r.reminderDays || '';
-                    base['حالة التذكير'] = rem.text || '';
-                    base['تم تفعيل العرض'] = r.offerActivated ? 'تم' : 'لم يتم';
-                    base['تاريخ تفعيل العرض'] = r.offerActivatedAt ? new Date(r.offerActivatedAt).toLocaleString('ar-EG') : '';
+                    const rem = getAccountReminder(r);
+                    base['ØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨ (Creation Date)'] = r.accountCreatedDate || '';
+                    base['ÙØªØ±Ø© Ø§Ù„ØªØ°ÙƒÙŠØ± Ø¨Ø§Ù„Ø£ÙŠØ§Ù… (Reminder Days)'] = r.reminderDays || '';
+                    base['Ø­Ø§Ù„Ø© Ø§Ù„ØªØ°ÙƒÙŠØ±'] = rem.text || '';
+                    base['ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] = r.offerActivated ? 'ØªÙ…' : 'Ù„Ù… ÙŠØªÙ…';
+                    base['ØªØ§Ø±ÙŠØ® ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] = r.offerActivatedAt ? new Date(r.offerActivatedAt).toLocaleString('ar-EG') : '';
                 } else {
-                    base['بيانات الحساب (Account)'] = r.selectedAccount || '';
+                    base['Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)'] = r.selectedAccount || '';
                 }
-                base['ملاحظات'] = r.notes || '';
-                base['تاريخ الإضافة'] = r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '';
+                base['Ù…Ù„Ø§Ø­Ø¸Ø§Øª'] = r.notes || '';
+                base['ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©'] = r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '';
                 return base;
             });
         }
@@ -1142,7 +1335,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, currentSheet.name);
         XLSX.writeFile(wb, `${currentSheet.name}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        showToast('تم تصدير ملف Excel بنجاح ✓', 'success');
+        showToast('ØªÙ… ØªØµØ¯ÙŠØ± Ù…Ù„Ù Excel Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
     };
 
     // Export to JSON Backup
@@ -1156,7 +1349,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         a.download = `Service_Hub_Sheets_Backup_${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('تم حفظ نسخة احتياطية شاملة لجميع الشيتات بنجاح ✓', 'success');
+        showToast('ØªÙ… Ø­ÙØ¸ Ù†Ø³Ø®Ø© Ø§Ø­ØªÙŠØ§Ø·ÙŠØ© Ø´Ø§Ù…Ù„Ø© Ù„Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø´ÙŠØªØ§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
     };
 
     // Import Excel or JSON
@@ -1179,14 +1372,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         });
                         loadCurrentSheetData();
                         refreshAllCounts();
-                        showToast('تم استعادة جميع الشيتات من النسخة الاحتياطية بنجاح ✓', 'success');
+                        showToast('ØªÙ… Ø§Ø³ØªØ¹Ø§Ø¯Ø© Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø´ÙŠØªØ§Øª Ù…Ù† Ø§Ù„Ù†Ø³Ø®Ø© Ø§Ù„Ø§Ø­ØªÙŠØ§Ø·ÙŠØ© Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
                     } else if (Array.isArray(parsed)) {
                         // Single sheet
                         saveRecords([...parsed, ...records]);
-                        showToast(`تم استيراد ${parsed.length} سجل بنجاح ✓`, 'success');
+                        showToast(`ØªÙ… Ø§Ø³ØªÙŠØ±Ø§Ø¯ ${parsed.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
                     }
                 } catch (err) {
-                    showToast('ملف النسخ الاحتياطي غير صالح', 'error');
+                    showToast('Ù…Ù„Ù Ø§Ù„Ù†Ø³Ø® Ø§Ù„Ø§Ø­ØªÙŠØ§Ø·ÙŠ ØºÙŠØ± ØµØ§Ù„Ø­', 'error');
                 }
             };
             reader.readAsText(file);
@@ -1201,7 +1394,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
                     if (jsonData.length <= 1) {
-                        showToast('الملف فارغ أو لا يحتوي على صفوف بيانات', 'warning');
+                        showToast('Ø§Ù„Ù…Ù„Ù ÙØ§Ø±Øº Ø£Ùˆ Ù„Ø§ ÙŠØ­ØªÙˆÙŠ Ø¹Ù„Ù‰ ØµÙÙˆÙ Ø¨ÙŠØ§Ù†Ø§Øª', 'warning');
                         return;
                     }
 
@@ -1240,13 +1433,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                     if (imported.length > 0) {
                         saveRecords([...imported, ...records]);
-                        showToast(`تم استيراد ${imported.length} سجل من ملف الإكسيل بنجاح ✓`, 'success');
+                        showToast(`ØªÙ… Ø§Ø³ØªÙŠØ±Ø§Ø¯ ${imported.length} Ø³Ø¬Ù„ Ù…Ù† Ù…Ù„Ù Ø§Ù„Ø¥ÙƒØ³ÙŠÙ„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
                     } else {
-                        showToast('لم يتم العثور على سجلات صالحة للاستيراد', 'warning');
+                        showToast('Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ø³Ø¬Ù„Ø§Øª ØµØ§Ù„Ø­Ø© Ù„Ù„Ø§Ø³ØªÙŠØ±Ø§Ø¯', 'warning');
                     }
                 } catch (err) {
                     console.error(err);
-                    showToast('حدث خطأ أثناء قراءة ملف الإكسيل', 'error');
+                    showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ù‚Ø±Ø§Ø¡Ø© Ù…Ù„Ù Ø§Ù„Ø¥ÙƒØ³ÙŠÙ„', 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -1268,10 +1461,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setSheetsList(updated);
         sheetsAPI.saveSheetsConfig(updated);
         setShowRenameModal(false);
-        showToast('تم تحديث اسم الشيت بنجاح ✓', 'success');
+        showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
     };
 
-    // Subscriptions & Account Alert Groups (قرب التجديد / التذكير في آخر 3 أيام، ومنتهي/مستحق، وساري)
+    // Subscriptions & Account Alert Groups (Ù‚Ø±Ø¨ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯ / Ø§Ù„ØªØ°ÙƒÙŠØ± ÙÙŠ Ø¢Ø®Ø± 3 Ø£ÙŠØ§Ù…ØŒ ÙˆÙ…Ù†ØªÙ‡ÙŠ/Ù…Ø³ØªØ­Ù‚ØŒ ÙˆØ³Ø§Ø±ÙŠ)
     const alertGroups = useMemo(() => {
         if (currentSheetId === 'trash_data') {
             return { nearRenewal: [], expired: [], active: [] };
@@ -1281,11 +1474,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const expired = [];
         const active = [];
 
-        records.forEach(r => {
+        const sourceRecords = currentSheetId === 'account_data'
+            ? records.filter(r => getAccountCategory(r) === activeAccountCategory)
+            : records;
+
+        sourceRecords.forEach(r => {
             if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return;
 
             const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
-                ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
+                ? getAccountReminder(r)
                 : calculateRemainingTime(r.startDate, r.duration, r.created_at);
 
             if (!rem || rem.status === 'none') return;
@@ -1307,11 +1504,26 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         expired.sort((a, b) => (b.remInfo.days ?? 0) - (a.remInfo.days ?? 0));
 
         return { nearRenewal, expired, active };
-    }, [records, currentSheetId]);
+    }, [records, currentSheetId, activeAccountCategory]);
 
     // Filter & Search (bulletproof against numbers and nulls)
     const filteredRecords = useMemo(() => {
         let result = records;
+
+        if (currentSheetId === 'account_data') {
+            result = result.filter(r => getAccountCategory(r) === activeAccountCategory);
+            if (accountStockFilter !== 'all') {
+                result = result.filter(r => {
+                    const currentUses = Math.max(0, Number(r.currentUses || 0));
+                    const maxUses = Math.max(1, Number(r.maxUses || 2));
+                    if (accountStockFilter === 'returned') return isReusedAccount(r);
+                    if (accountStockFilter === 'available') return currentUses <= 0;
+                    if (accountStockFilter === 'partial') return currentUses > 0 && currentUses < maxUses;
+                    if (accountStockFilter === 'full') return currentUses >= maxUses;
+                    return true;
+                });
+            }
+        }
 
         // Filter by Expiry Status Tab (All, Near Renewal, Expired, Active)
         if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && offerReminderFilter !== 'all') {
@@ -1319,7 +1531,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 if (offerReminderFilter === 'completed') return !!r.offerActivated;
                 if (offerReminderFilter === 'pending') return !r.offerActivated;
                 if (r.offerActivated) return false;
-                const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
+                const rem = getAccountReminder(r);
                 if (offerReminderFilter === 'near3') return rem.days !== null && rem.days > 0 && rem.days <= 3;
                 if (offerReminderFilter === 'today') return rem.days === 0;
                 if (offerReminderFilter === 'overdue') return rem.days !== null && rem.days < 0;
@@ -1331,7 +1543,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             result = result.filter(r => {
                 if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
-                    ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
+                    ? getAccountReminder(r)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days !== null && rem.days >= 0 && rem.days <= 3 && rem.status !== 'lifetime';
             });
@@ -1339,14 +1551,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             result = result.filter(r => {
                 if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
-                    ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
+                    ? getAccountReminder(r)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days !== null && rem.days < 0;
             });
         } else if (expiryFilter === 'active') {
             result = result.filter(r => {
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
-                    ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
+                    ? getAccountReminder(r)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return rem.days > 3 || rem.status === 'lifetime';
             });
@@ -1356,7 +1568,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const q = searchTerm.toLowerCase().trim();
             result = result.filter(r => {
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
-                    ? calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at)
+                    ? getAccountReminder(r)
                     : calculateRemainingTime(r.startDate, r.duration, r.created_at);
                 return (
                     String(r.email || '').toLowerCase().includes(q) ||
@@ -1377,7 +1589,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     String(r.invoiceNumber || '').toLowerCase().includes(q) ||
                     String(r.visa || '').toLowerCase().includes(q) ||
                     String(r.visaAccount || '').toLowerCase().includes(q) ||
-                    String(r.notes || '').toLowerCase().includes(q)
+                    String(r.notes || '').toLowerCase().includes(q) ||
+                    String(r.accountCategory || '').toLowerCase().includes(q) ||
+                    String(r.capcutMonths || '').toLowerCase().includes(q) ||
+                    String(r.renewalDate || '').toLowerCase().includes(q) ||
+                    String(r.sharedUsers || '').toLowerCase().includes(q) ||
+                    String(r.twoFaLink || '').toLowerCase().includes(q)
                 );
             });
         }
@@ -1385,24 +1602,31 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         // Advanced filters: paymentStatus filter
         if (paymentFilter !== 'all' && isClientOrMerchant) {
             result = result.filter(r => {
-                const status = String(r.paymentStatus || 'مدفوع').toLowerCase();
-                if (paymentFilter === 'paid') return status === 'مدفوع';
-                if (paymentFilter === 'unpaid') return status !== 'مدفوع';
+                const status = String(r.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹').toLowerCase();
+                if (paymentFilter === 'paid') return status === 'Ù…Ø¯ÙÙˆØ¹';
+                if (paymentFilter === 'unpaid') return status !== 'Ù…Ø¯ÙÙˆØ¹';
                 return true;
             });
         }
 
-        // Advanced filters: deviceType filter (شخصي أم مشترك)
+        // Advanced filters: deviceType filter (Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ)
         if (deviceFilter !== 'all' && isClientOrMerchant) {
             result = result.filter(r => {
                 const dev = String(r.deviceType || '').trim();
-                if (deviceFilter === 'شخصي') {
-                    return dev === 'شخصي' || dev === 'جهازين';
+                if (deviceFilter === 'Ø´Ø®ØµÙŠ') {
+                    return dev === 'Ø´Ø®ØµÙŠ' || dev === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
                 }
-                if (deviceFilter === 'مشترك') {
-                    return dev === 'مشترك' || dev === 'جهاز' || dev === '' || (!r.deviceType);
+                if (deviceFilter === 'Ù…Ø´ØªØ±Ùƒ') {
+                    return dev === 'Ù…Ø´ØªØ±Ùƒ' || dev === 'Ø¬Ù‡Ø§Ø²' || dev === '' || (!r.deviceType);
                 }
                 return dev === deviceFilter;
+            });
+        }
+
+        if (renewalFilter !== 'all' && isClientOrMerchant) {
+            result = result.filter(r => {
+                const notRenewed = r.renewalStatus === 'not_renewed' || Boolean(r.nonRenewedAt);
+                return renewalFilter === 'not_renewed' ? notRenewed : !notRenewed;
             });
         }
 
@@ -1416,8 +1640,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return 0;
             }
             if (sortBy.field === 'accountReminderDays') {
-                const daysA = calculateAccountReminder(a.accountCreatedDate, a.reminderDays, a.created_at).days ?? -999999;
-                const daysB = calculateAccountReminder(b.accountCreatedDate, b.reminderDays, b.created_at).days ?? -999999;
+                const daysA = getAccountReminder(a).days ?? -999999;
+                const daysB = getAccountReminder(b).days ?? -999999;
                 if (daysA < daysB) return sortBy.asc ? -1 : 1;
                 if (daysA > daysB) return sortBy.asc ? 1 : -1;
                 return 0;
@@ -1438,7 +1662,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         });
 
         return result;
-    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId]);
+    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId, activeAccountCategory, paymentFilter, deviceFilter, renewalFilter, accountStockFilter, isClientOrMerchant]);
 
     // Pagination
     const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
@@ -1470,12 +1694,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             return { pending: 0, near3: 0, today: 0, overdue: 0, completed: 0 };
         }
 
-        return records.reduce((acc, r) => {
+        const sourceRecords = currentSheetId === 'account_data'
+            ? records.filter(r => getAccountCategory(r) === activeAccountCategory)
+            : records;
+
+        return sourceRecords.reduce((acc, r) => {
             if (r.offerActivated) {
                 acc.completed += 1;
                 return acc;
             }
-            const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
+            const rem = getAccountReminder(r);
             if (rem.days === null) return acc;
             acc.pending += 1;
             if (rem.days > 0 && rem.days <= 3) acc.near3 += 1;
@@ -1483,11 +1711,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             if (rem.days < 0) acc.overdue += 1;
             return acc;
         }, { pending: 0, near3: 0, today: 0, overdue: 0, completed: 0 });
-    }, [records, currentSheetId]);
+    }, [records, currentSheetId, activeAccountCategory]);
 
     // Stats calculations
     const stats = useMemo(() => {
-        const total = records.length;
+        const statRecords = currentSheetId === 'account_data'
+            ? records.filter(r => getAccountCategory(r) === activeAccountCategory)
+            : records;
+        const total = statRecords.length;
         if (currentSheetId === 'trash_data') {
             const accountsCount = records.filter(r => r.originSheetId === 'account_data').length;
             const clientsCount = records.filter(r => r.originSheetId === 'client_data').length;
@@ -1515,13 +1746,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             };
         }
 
-        const withInvoices = records.filter(r => r.invoiceNumber).length;
-        const withVisa = records.filter(r => r.visa).length;
-        const withVisaAccount = records.filter(r => r.visaAccount).length;
-        const withDuration = records.filter(r => r.duration).length;
-        const withBothPasswords = records.filter(r => r.password && r.password2).length;
-        const withEmail = records.filter(r => r.email).length;
-        const withReminder = records.filter(r => r.reminderDays && parseInt(r.reminderDays) > 0).length;
+        const withInvoices = statRecords.filter(r => r.invoiceNumber).length;
+        const withVisa = statRecords.filter(r => r.visa).length;
+        const withVisaAccount = statRecords.filter(r => r.visaAccount).length;
+        const withDuration = statRecords.filter(r => r.duration).length;
+        const withBothPasswords = statRecords.filter(r => r.password && r.password2).length;
+        const withEmail = statRecords.filter(r => r.email).length;
+        const withReminder = statRecords.filter(r => r.reminderDays && parseInt(r.reminderDays) > 0).length;
         return {
             total,
             withInvoices,
@@ -1534,7 +1765,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             nearCount: alertGroups.nearRenewal.length,
             expiredCount: alertGroups.expired.length
         };
-    }, [records, alertGroups, currentSheetId, offerReminderStats]);
+    }, [records, alertGroups, currentSheetId, offerReminderStats, activeAccountCategory]);
 
     return (
         <div className="space-y-6 animate-fade-in font-sans pb-12">
@@ -1560,7 +1791,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                            {isTrashSheet ? 'إجمالي المحذوفات' : 'إجمالي السجلات'}
+                            {isTrashSheet ? 'Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ù…Ø­Ø°ÙˆÙØ§Øª' : 'Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø³Ø¬Ù„Ø§Øª'}
                         </p>
                         <h4 className={`text-2xl font-black ${isTrashSheet ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white'} mt-1`}>
                             {stats.total}
@@ -1575,7 +1806,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات محذوفة</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ù…Ø­Ø°ÙˆÙØ©</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.accountsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1585,7 +1816,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">عملاء محذوفين</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¹Ù…Ù„Ø§Ø¡ Ù…Ø­Ø°ÙˆÙÙŠÙ†</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.clientsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1595,7 +1826,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تجار محذوفين</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ¬Ø§Ø± Ù…Ø­Ø°ÙˆÙÙŠÙ†</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.merchantsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1607,7 +1838,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">مدة اشتراك مسجلة</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ù…Ø¯Ø© Ø§Ø´ØªØ±Ø§Ùƒ Ù…Ø³Ø¬Ù„Ø©</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.withDuration}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1617,7 +1848,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">باسورد أول وثانٍ</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¨Ø§Ø³ÙˆØ±Ø¯ Ø£ÙˆÙ„ ÙˆØ«Ø§Ù†Ù</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withBothPasswords}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1627,7 +1858,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">إيميلات مسجلة</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…Ø³Ø¬Ù„Ø©</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.withEmail}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1639,7 +1870,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تذكيرات اليوم ⏰</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ°ÙƒÙŠØ±Ø§Øª Ø§Ù„ÙŠÙˆÙ… â°</p>
                                 <h4 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{stats.todayCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xl">
@@ -1649,7 +1880,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">قادمة خلال 3 أيام</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ù‚Ø§Ø¯Ù…Ø© Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.nearCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1659,7 +1890,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تم إنجازها</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªÙ… Ø¥Ù†Ø¬Ø§Ø²Ù‡Ø§</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.completedCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1671,7 +1902,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات بتذكير محدد</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ø¨ØªØ°ÙƒÙŠØ± Ù…Ø­Ø¯Ø¯</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withReminder}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1681,7 +1912,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تذكيرات قريبة / مستحقة</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ°ÙƒÙŠØ±Ø§Øª Ù‚Ø±ÙŠØ¨Ø© / Ù…Ø³ØªØ­Ù‚Ø©</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.nearCount + stats.expiredCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1691,7 +1922,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">إيميلات مسجلة</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…Ø³Ø¬Ù„Ø©</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.withEmail}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1703,7 +1934,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">سجلات بفواتير</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø³Ø¬Ù„Ø§Øª Ø¨ÙÙˆØ§ØªÙŠØ±</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.withInvoices}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1713,7 +1944,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">سجلات بفيزا</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø³Ø¬Ù„Ø§Øª Ø¨ÙÙŠØ²Ø§</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.withVisa}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1723,7 +1954,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات الفيزا</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„ÙÙŠØ²Ø§</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withVisaAccount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1756,7 +1987,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             setShowRenameModal(true);
                                         }}
                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-xs p-1"
-                                        title="تعديل اسم الشيت"
+                                        title="ØªØ¹Ø¯ÙŠÙ„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª"
                                     >
                                         <i className="fa-solid fa-pen-to-square"></i>
                                     </button>
@@ -1764,14 +1995,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </div>
                             <p className="text-xs text-slate-400 dark:text-slate-500">
                                 {isTrashSheet
-                                    ? 'سلة المهملات: استعراض الحسابات والبيانات المحذوفة مع إمكانية استردادها للشيت الأصلي أو حذفها نهائياً'
+                                    ? 'Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª: Ø§Ø³ØªØ¹Ø±Ø§Ø¶ Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª ÙˆØ§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø­Ø°ÙˆÙØ© Ù…Ø¹ Ø¥Ù…ÙƒØ§Ù†ÙŠØ© Ø§Ø³ØªØ±Ø¯Ø§Ø¯Ù‡Ø§ Ù„Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ Ø£Ùˆ Ø­Ø°ÙÙ‡Ø§ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹'
                                     : currentSheetId === 'reminders_data'
-                                    ? 'جدول التذكيرات والمهام: تذكير بمواعيد التجديدات والالتزامات الهامة في أيام محددة لتجنب نسيانها'
+                                    ? 'Ø¬Ø¯ÙˆÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±Ø§Øª ÙˆØ§Ù„Ù…Ù‡Ø§Ù…: ØªØ°ÙƒÙŠØ± Ø¨Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯Ø§Øª ÙˆØ§Ù„Ø§Ù„ØªØ²Ø§Ù…Ø§Øª Ø§Ù„Ù‡Ø§Ù…Ø© ÙÙŠ Ø£ÙŠØ§Ù… Ù…Ø­Ø¯Ø¯Ø© Ù„ØªØ¬Ù†Ø¨ Ù†Ø³ÙŠØ§Ù†Ù‡Ø§'
                                     : isClientOrMerchant
-                                    ? 'العملاء والاشتراكات'
+                                    ? 'Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡ ÙˆØ§Ù„Ø§Ø´ØªØ±Ø§ÙƒØ§Øª'
                                     : currentSheetId === 'account_data'
-                                    ? 'الحسابات المتاحة وتفعيل العروض'
-                                    : 'السجلات'}
+                                    ? 'Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù…ØªØ§Ø­Ø© ÙˆØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±ÙˆØ¶'
+                                    : 'Ø§Ù„Ø³Ø¬Ù„Ø§Øª'}
                             </p>
                         </div>
                     </div>
@@ -1784,10 +2015,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <button
                                         onClick={handleEmptyTrash}
                                         className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 shadow-xs transition transform active:scale-95 cursor-pointer"
-                                        title="حذف جميع السجلات في سلة المهملات نهائياً"
+                                        title="Ø­Ø°Ù Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø³Ø¬Ù„Ø§Øª ÙÙŠ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹"
                                     >
                                         <i className="fa-solid fa-trash-can"></i>
-                                        <span>إفراغ سلة المهملات</span>
+                                        <span>Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª</span>
                                     </button>
                                 )}
                             </>
@@ -1802,28 +2033,36 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         setFormData({
                                             name: '',
                                             phone: '',
-                                            contactChannel: 'واتساب',
+                                            contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
                                             email: '',
-                                            password: currentSheetId === 'reminders_data' ? '🔴 عاجل جداً' : '',
+                                            password: currentSheetId === 'reminders_data' ? 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹' : '',
                                             password2: '',
                                             duration: '',
                                             startDate: new Date().toISOString().slice(0, 10),
-                                            deviceType: 'مشترك',
-                                            paymentStatus: 'مدفوع',
+                                            deviceType: 'Ù…Ø´ØªØ±Ùƒ',
+                                            paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
                                             selectedAccount: '',
                                             invoiceNumber: '',
                                             visa: '',
                                             visaAccount: '',
                                             notes: '',
                                             accountCreatedDate: new Date().toISOString().slice(0, 10),
-                                            reminderDays: currentSheetId === 'reminders_data' ? '0' : '20'
+                                            reminderDays: currentSheetId === 'reminders_data' ? '0' : '20',
+                                            accountCategory: activeAccountCategory,
+                                            capcutMode: '',
+                                            capcutGiftUsed: false,
+                                            capcutMonthlyReminder: activeAccountCategory === 'capcut',
+                                            capcutMonths: activeAccountCategory === 'capcut' ? 2 : 1,
+                                            sharedUsers: 1,
+                                            renewalDate: '',
+                                            twoFaLink: ''
                                         });
                                         setShowAddModal(true);
                                     }}
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition transform active:scale-95 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-plus"></i>
-                                    <span>{currentSheetId === 'reminders_data' ? 'إضافة تذكير جديد' : 'إضافة بيانات جديدة'}</span>
+                                    <span>{currentSheetId === 'reminders_data' ? 'Ø¥Ø¶Ø§ÙØ© ØªØ°ÙƒÙŠØ± Ø¬Ø¯ÙŠØ¯' : 'Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù†Ø§Øª Ø¬Ø¯ÙŠØ¯Ø©'}</span>
                                 </button>
                             )
                         )}
@@ -1841,12 +2080,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder={
                                 currentSheetId === 'reminders_data'
-                                    ? "بحث في عنوان التذكير، الأولوية، التاريخ، الملاحظات..."
+                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ±ØŒ Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ©ØŒ Ø§Ù„ØªØ§Ø±ÙŠØ®ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
                                     : isClientOrMerchant
-                                    ? "بحث في الإيميل، الباسورد، مدة الاشتراك..."
+                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ..."
                                     : currentSheetId === 'account_data'
-                                    ? "بحث في الإيميل، الباسورد، تاريخ الإنشاء، التذكير، الملاحظات..."
-                                    : "بحث في الإيميل، الباسورد، الفاتورة، الفيزا، الملاحظات..."
+                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡ØŒ Ø§Ù„ØªØ°ÙƒÙŠØ±ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
+                                    : "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ Ø§Ù„ÙØ§ØªÙˆØ±Ø©ØŒ Ø§Ù„ÙÙŠØ²Ø§ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
                             }
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
@@ -1863,7 +2102,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     {/* Page Sizing */}
                     <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
                         <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400 font-bold hidden sm:inline">عرض:</span>
+                            <span className="text-xs text-slate-400 font-bold hidden sm:inline">Ø¹Ø±Ø¶:</span>
                             <select
                                 value={pageSize}
                                 onChange={(e) => {
@@ -1876,21 +2115,60 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <option value={25}>25</option>
                                 <option value={50}>50</option>
                                 <option value={100}>100</option>
-                                <option value="all">الكل</option>
+                                <option value="all">Ø§Ù„ÙƒÙ„</option>
                             </select>
                         </div>
                     </div>
                 </div>
 
+                {currentSheetId === 'account_data' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-3">
+                        {ACCOUNT_CATEGORIES.map(cat => {
+                            const active = activeAccountCategory === cat.id;
+                            const count = records.filter(r => getAccountCategory(r) === cat.id).length;
+                            return (
+                                <button
+                                    key={cat.id}
+                                    type="button"
+                                    onClick={() => {
+                                        setActiveAccountCategory(cat.id);
+                                        setCurrentPage(1);
+                                        setSelectedIds(new Set());
+                                        setOfferReminderFilter('all');
+                                    }}
+                                    className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-right transition ${
+                                        active
+                                            ? 'bg-slate-900 text-white border-slate-900 shadow-md dark:bg-indigo-600 dark:border-indigo-500'
+                                            : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-750'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className={`w-9 h-9 rounded-lg flex items-center justify-center ${active ? 'bg-white/15 text-white' : 'bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 border border-slate-200 dark:border-slate-700'}`}>
+                                            <i className={`fa-solid ${cat.icon}`}></i>
+                                        </span>
+                                        <span>
+                                            <span className="block text-sm font-black">{cat.label}</span>
+                                            <span className={`block text-[10px] font-bold ${active ? 'text-white/70' : 'text-slate-400'}`}>{cat.hint}</span>
+                                        </span>
+                                    </div>
+                                    <span className={`min-w-7 h-7 px-2 rounded-full inline-flex items-center justify-center text-xs font-black ${active ? 'bg-white/20 text-white' : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700'}`}>
+                                        {count}
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 {currentSheetId === 'reminders_data' && (
                     <div className="flex flex-wrap items-center gap-2 pt-3">
                         {[
-                            { id: 'all', label: 'كل التذكيرات', count: records.length, icon: 'fa-list', cls: 'slate' },
-                            { id: 'pending', label: 'قيد الانتظار', count: offerReminderStats.pending, icon: 'fa-hourglass-half', cls: 'purple' },
-                            { id: 'today', label: 'تذكيرات اليوم', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
-                            { id: 'near3', label: 'قادمة خلال 3 أيام', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
-                            { id: 'overdue', label: 'متأخرة', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
-                            { id: 'completed', label: 'تم الإنجاز', count: offerReminderStats.completed, icon: 'fa-circle-check', cls: 'emerald' },
+                            { id: 'all', label: 'ÙƒÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±Ø§Øª', count: records.length, icon: 'fa-list', cls: 'slate' },
+                            { id: 'pending', label: 'Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±', count: offerReminderStats.pending, icon: 'fa-hourglass-half', cls: 'purple' },
+                            { id: 'today', label: 'ØªØ°ÙƒÙŠØ±Ø§Øª Ø§Ù„ÙŠÙˆÙ…', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
+                            { id: 'near3', label: 'Ù‚Ø§Ø¯Ù…Ø© Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
+                            { id: 'overdue', label: 'Ù…ØªØ£Ø®Ø±Ø©', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
+                            { id: 'completed', label: 'ØªÙ… Ø§Ù„Ø¥Ù†Ø¬Ø§Ø²', count: offerReminderStats.completed, icon: 'fa-circle-check', cls: 'emerald' },
                         ].map(item => {
                             const active = offerReminderFilter === item.id;
                             const colorClass = item.cls === 'amber'
@@ -1928,11 +2206,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 {currentSheetId === 'account_data' && (
                     <div className="flex flex-wrap items-center gap-2 pt-3">
                         {[
-                            { id: 'all', label: 'كل السجلات', count: records.length, icon: 'fa-list', cls: 'slate' },
-                            { id: 'pending', label: 'لم يتم العرض', count: offerReminderStats.pending, icon: 'fa-bolt', cls: 'purple' },
-                            { id: 'near3', label: 'قرب خلال 3 أيام', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
-                            { id: 'today', label: 'ميعاده اليوم', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
-                            { id: 'overdue', label: 'عدى بدون تفعيل', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
+                            { id: 'all', label: 'ÙƒÙ„ Ø§Ù„Ø³Ø¬Ù„Ø§Øª', count: records.length, icon: 'fa-list', cls: 'slate' },
+                            { id: 'pending', label: 'Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø±Ø¶', count: offerReminderStats.pending, icon: 'fa-bolt', cls: 'purple' },
+                            { id: 'near3', label: 'Ù‚Ø±Ø¨ Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
+                            { id: 'today', label: 'Ù…ÙŠØ¹Ø§Ø¯Ù‡ Ø§Ù„ÙŠÙˆÙ…', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
+                            { id: 'overdue', label: 'Ø¹Ø¯Ù‰ Ø¨Ø¯ÙˆÙ† ØªÙØ¹ÙŠÙ„', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
                         ].map(item => {
                             const active = offerReminderFilter === item.id;
                             const colorClass = item.cls === 'amber'
@@ -1967,7 +2245,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             </div>
 
             {/* Advanced Filters Panel - Client/Merchant Only */}
-            {isClientOrMerchant && (
+            {(isClientOrMerchant || currentSheetId === 'account_data') && (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
                     <button
                         type="button"
@@ -1976,10 +2254,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     >
                         <div className="flex items-center gap-2">
                             <i className="fa-solid fa-sliders text-indigo-500"></i>
-                            <span>فلاتر متقدمة</span>
-                            {(paymentFilter !== 'all' || deviceFilter !== 'all') && (
+                            <span>ÙÙ„Ø§ØªØ± Ù…ØªÙ‚Ø¯Ù…Ø©</span>
+                            {(paymentFilter !== 'all' || deviceFilter !== 'all' || renewalFilter !== 'all' || accountStockFilter !== 'all') && (
                                 <span className="bg-indigo-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">
-                                    {[paymentFilter !== 'all' ? 1 : 0, deviceFilter !== 'all' ? 1 : 0].reduce((a,b)=>a+b,0)} فعّال
+                                    {[paymentFilter !== 'all' ? 1 : 0, deviceFilter !== 'all' ? 1 : 0, renewalFilter !== 'all' ? 1 : 0, accountStockFilter !== 'all' ? 1 : 0].reduce((a,b)=>a+b,0)} ÙØ¹Ù‘Ø§Ù„
                                 </span>
                             )}
                         </div>
@@ -1992,13 +2270,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-money-bill-wave text-emerald-500"></i>
-                                    حالة الدفع
+                                    Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {[
-                                        { id: 'all', label: 'الكل', icon: 'fa-list' },
-                                        { id: 'paid', label: '✅ مدفوع', icon: 'fa-check-circle' },
-                                        { id: 'unpaid', label: '❌ غير مدفوع', icon: 'fa-times-circle' },
+                                        { id: 'all', label: 'Ø§Ù„ÙƒÙ„', icon: 'fa-list' },
+                                        { id: 'paid', label: 'âœ… Ù…Ø¯ÙÙˆØ¹', icon: 'fa-check-circle' },
+                                        { id: 'unpaid', label: 'âŒ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹', icon: 'fa-times-circle' },
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -2016,13 +2294,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-users-gear text-blue-500"></i>
-                                    نوع الاشتراك
+                                    Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {[
-                                        { id: 'all', label: 'الكل' },
-                                        { id: 'شخصي', label: '🛡️ شخصي' },
-                                        { id: 'مشترك', label: '💻 مشترك' },
+                                        { id: 'all', label: 'Ø§Ù„ÙƒÙ„' },
+                                        { id: 'Ø´Ø®ØµÙŠ', label: 'ðŸ›¡ï¸ Ø´Ø®ØµÙŠ' },
+                                        { id: 'Ù…Ø´ØªØ±Ùƒ', label: 'ðŸ’» Ù…Ø´ØªØ±Ùƒ' },
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -2036,16 +2314,67 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                             </div>
 
+                            {currentSheetId === 'account_data' && (
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                        <i className="fa-solid fa-boxes-stacked text-orange-500"></i>
+                                        Account stock filter
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { id: 'all', label: 'All' },
+                                            { id: 'returned', label: 'Returned / not renewed' },
+                                            { id: 'available', label: 'Available' },
+                                            { id: 'partial', label: 'Partial' },
+                                            { id: 'full', label: 'Full' },
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => { setAccountStockFilter(opt.id); setCurrentPage(1); }}
+                                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition ${accountStockFilter === opt.id ? 'bg-orange-600 text-white border-orange-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-orange-50 dark:hover:bg-orange-900/20'}`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {(isClientOrMerchant || currentSheetId === 'account_data') && (
+                                <div>
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                        <i className="fa-solid fa-user-clock text-rose-500"></i>
+                                        Renewal status
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { id: 'all', label: 'All' },
+                                            { id: 'renewed', label: 'Active / renewed' },
+                                            { id: 'not_renewed', label: 'Not renewed' },
+                                        ].map(opt => (
+                                            <button
+                                                key={opt.id}
+                                                type="button"
+                                                onClick={() => { setRenewalFilter(opt.id); setCurrentPage(1); }}
+                                                className={`px-3 py-1.5 rounded-lg border text-[11px] font-bold transition ${renewalFilter === opt.id ? 'bg-rose-600 text-white border-rose-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-rose-50 dark:hover:bg-rose-900/20'}`}
+                                            >
+                                                {opt.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             {/* Reset All Filters */}
-                            {(paymentFilter !== 'all' || deviceFilter !== 'all') && (
+                            {(paymentFilter !== 'all' || deviceFilter !== 'all' || renewalFilter !== 'all' || accountStockFilter !== 'all') && (
                                 <div className="sm:col-span-2">
                                     <button
                                         type="button"
-                                        onClick={() => { setPaymentFilter('all'); setDeviceFilter('all'); setCurrentPage(1); }}
+                                        onClick={() => { setPaymentFilter('all'); setDeviceFilter('all'); setRenewalFilter('all'); setAccountStockFilter('all'); setCurrentPage(1); }}
                                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-[11px] font-bold hover:bg-rose-100 transition"
                                     >
                                         <i className="fa-solid fa-rotate-right"></i>
-                                        إعادة تعيين الفلاتر المتقدمة
+                                        Ø¥Ø¹Ø§Ø¯Ø© ØªØ¹ÙŠÙŠÙ† Ø§Ù„ÙÙ„Ø§ØªØ± Ø§Ù„Ù…ØªÙ‚Ø¯Ù…Ø©
                                     </button>
                                 </div>
                             )}
@@ -2068,17 +2397,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>عنوان التذكير والمهمة</span>
+                                                <span>Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ± ÙˆØ§Ù„Ù…Ù‡Ù…Ø©</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-2 py-1.5 text-center">الأولوية / التصنيف</th>
+                                        <th className="px-2 py-1.5 text-center">Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© / Ø§Ù„ØªØµÙ†ÙŠÙ</th>
                                         <th
                                             onClick={() => setSortBy({ field: 'accountCreatedDate', asc: sortBy.field === 'accountCreatedDate' ? !sortBy.asc : true })}
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>موعد التذكير</span>
+                                                <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
@@ -2087,11 +2416,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>الحالة والمتبقي</span>
+                                                <span>Ø§Ù„Ø­Ø§Ù„Ø© ÙˆØ§Ù„Ù…ØªØ¨Ù‚ÙŠ</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-2 py-1.5">الملاحظات والتفاصيل</th>
+                                        <th className="px-2 py-1.5">Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª ÙˆØ§Ù„ØªÙØ§ØµÙŠÙ„</th>
                                     </>
                                 ) : (
                                     <>
@@ -2102,7 +2431,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>اسم العميل</span>
+                                                        <span>Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2111,11 +2440,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>التواصل</span>
+                                                        <span>Ø§Ù„ØªÙˆØ§ØµÙ„</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
-                                                <th className="px-1.5 py-1.5">الوسيلة</th>
+                                                <th className="px-1.5 py-1.5">Ø§Ù„ÙˆØ³ÙŠÙ„Ø©</th>
                                             </>
                                         )}
                                         <th
@@ -2123,12 +2452,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>البريد الإلكتروني</span>
+                                                <span>Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-1 py-1.5">Outlook Password</th>
-                                        <th className="px-1 py-1.5">Adobe Password</th>
+                                        <th className="px-1 py-1.5">
+                                            {currentSheetId === 'account_data' && (activeAccountCategory === 'capcut' || activeAccountCategory === 'chatgpt_shared') ? 'Password' : 'Outlook Password'}
+                                        </th>
+                                        <th className="px-1 py-1.5">
+                                            {currentSheetId === 'account_data' && activeAccountCategory === 'capcut'
+                                                ? 'Subscription'
+                                            : currentSheetId === 'account_data' && activeAccountCategory === 'chatgpt_shared'
+                                                ? '2FA Link'
+                                                : 'Adobe Password'}
+                                        </th>
                                         {isTrashSheet ? (
                                             <>
                                                 <th
@@ -2136,7 +2473,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>الشيت الأصلي</span>
+                                                        <span>Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2145,7 +2482,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>تاريخ الحذف</span>
+                                                        <span>ØªØ§Ø±ÙŠØ® Ø§Ù„Ø­Ø°Ù</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2154,7 +2491,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-purple-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>بيانات الحساب</span>
+                                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2166,7 +2503,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>مدة الاشتراك</span>
+                                                        <span>Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2175,7 +2512,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>المدة المتبقية</span>
+                                                        <span>Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2184,7 +2521,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>نوع الاشتراك</span>
+                                                        <span>Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2193,7 +2530,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>حالة الدفع</span>
+                                                        <span>Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2205,7 +2542,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>تاريخ الإنشاء</span>
+                                                        <span>ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2214,7 +2551,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>التذكير</span>
+                                                        <span>Ø§Ù„ØªØ°ÙƒÙŠØ±</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2223,10 +2560,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>استخدام الحساب</span>
+                                                        <span>Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ø­Ø³Ø§Ø¨</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
+                                                <th className="px-1.5 py-1.5">ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ù†ÙˆØ¹</th>
                                             </>
                                         ) : (
                                             <>
@@ -2235,18 +2573,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>رقم الفاتورة</span>
+                                                        <span>Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø©</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
-                                                <th className="px-1.5 py-1.5">الفيزا</th>
+                                                <th className="px-1.5 py-1.5">Ø§Ù„ÙÙŠØ²Ø§</th>
                                                 <th className="px-1.5 py-1.5">Edu Mail</th>
                                                 <th
                                                     onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>بيانات الحساب</span>
+                                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2254,22 +2592,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         )}
                                     </>
                                 )}
-                                <th className="px-1 py-1.5 text-center w-12 text-[11px]">إجراءات</th>
+                                <th className="px-1 py-1.5 text-center w-12 text-[11px]">Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª</th>
                             </tr>
                         </thead>
 
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-slate-700 dark:text-slate-300">
                             {paginatedRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={isTrashSheet ? 8 : (currentSheetId === 'reminders_data' ? 6 : (currentSheetId === 'client_data' ? 12 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 8 : 9))))} className="p-12 text-center text-slate-400">
+                                    <td colSpan={isTrashSheet ? 8 : (currentSheetId === 'reminders_data' ? 6 : (currentSheetId === 'client_data' ? 12 : (isClientOrMerchant ? 9 : (currentSheetId === 'account_data' ? 9 : 9))))} className="p-12 text-center text-slate-400">
                                         <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-400 text-2xl">
                                             <i className={`fa-solid ${isTrashSheet ? 'fa-trash-can text-rose-400' : (currentSheetId === 'reminders_data' ? 'fa-bell text-amber-500' : 'fa-folder-open')}`}></i>
                                         </div>
                                         <p className="font-bold text-sm">
-                                            {isTrashSheet ? 'سلة المهملات فارغة تماماً' : (currentSheetId === 'reminders_data' ? 'لا توجد تذكيرات مسجلة حتى الآن' : 'لا توجد سجلات في هذا الشيت حتى الآن')}
+                                            {isTrashSheet ? 'Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª ÙØ§Ø±ØºØ© ØªÙ…Ø§Ù…Ø§Ù‹' : (currentSheetId === 'reminders_data' ? 'Ù„Ø§ ØªÙˆØ¬Ø¯ ØªØ°ÙƒÙŠØ±Ø§Øª Ù…Ø³Ø¬Ù„Ø© Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†' : 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø³Ø¬Ù„Ø§Øª ÙÙŠ Ù‡Ø°Ø§ Ø§Ù„Ø´ÙŠØª Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†')}
                                         </p>
                                         <p className="text-xs mt-1 text-slate-400">
-                                            {isTrashSheet ? 'أي حسابات أو بيانات يتم حذفها ستظهر هنا ويمكنك استردادها في أي وقت' : (currentSheetId === 'reminders_data' ? 'انقر على "إضافة تذكير جديد" لحفظ موعد أو مهمة لا تريد نسيانها' : 'انقر على "إضافة بيان جديد" للبدء في حفظ البيانات')}
+                                            {isTrashSheet ? 'Ø£ÙŠ Ø­Ø³Ø§Ø¨Ø§Øª Ø£Ùˆ Ø¨ÙŠØ§Ù†Ø§Øª ÙŠØªÙ… Ø­Ø°ÙÙ‡Ø§ Ø³ØªØ¸Ù‡Ø± Ù‡Ù†Ø§ ÙˆÙŠÙ…ÙƒÙ†Ùƒ Ø§Ø³ØªØ±Ø¯Ø§Ø¯Ù‡Ø§ ÙÙŠ Ø£ÙŠ ÙˆÙ‚Øª' : (currentSheetId === 'reminders_data' ? 'Ø§Ù†Ù‚Ø± Ø¹Ù„Ù‰ "Ø¥Ø¶Ø§ÙØ© ØªØ°ÙƒÙŠØ± Ø¬Ø¯ÙŠØ¯" Ù„Ø­ÙØ¸ Ù…ÙˆØ¹Ø¯ Ø£Ùˆ Ù…Ù‡Ù…Ø© Ù„Ø§ ØªØ±ÙŠØ¯ Ù†Ø³ÙŠØ§Ù†Ù‡Ø§' : 'Ø§Ù†Ù‚Ø± Ø¹Ù„Ù‰ "Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù† Ø¬Ø¯ÙŠØ¯" Ù„Ù„Ø¨Ø¯Ø¡ ÙÙŠ Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª')}
                                         </p>
                                     </td>
                                 </tr>
@@ -2300,7 +2638,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
                                                                     : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 text-transparent hover:text-emerald-500 bg-white dark:bg-slate-800'
                                                             }`}
-                                                            title={rec.offerActivated ? 'انقر لإلغاء الإنجاز وإعادته لقيد الانتظار' : 'انقر للتعليم كمكتمل'}
+                                                            title={rec.offerActivated ? 'Ø§Ù†Ù‚Ø± Ù„Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø¥Ù†Ø¬Ø§Ø² ÙˆØ¥Ø¹Ø§Ø¯ØªÙ‡ Ù„Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±' : 'Ø§Ù†Ù‚Ø± Ù„Ù„ØªØ¹Ù„ÙŠÙ… ÙƒÙ…ÙƒØªÙ…Ù„'}
                                                         >
                                                             <i className="fa-solid fa-check text-[10px]"></i>
                                                         </button>
@@ -2308,12 +2646,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <span className={`text-xs font-bold truncate ${
                                                                 rec.offerActivated ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'
                                                             }`} title={rec.email}>
-                                                                {rec.email || 'بدون عنوان'}
+                                                                {rec.email || 'Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†'}
                                                             </span>
                                                             <button
                                                                 onClick={() => handleCopy(rec.email, `rem_${rec.id}`)}
                                                                 className="text-slate-400 hover:text-indigo-600 p-0.5 transition flex-shrink-0"
-                                                                title="نسخ عنوان التذكير"
+                                                                title="Ù†Ø³Ø® Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ±"
                                                             >
                                                                 <i className={`fa-solid ${copiedField === `rem_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                             </button>
@@ -2324,12 +2662,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {/* Priority / Category */}
                                                 <td className="px-2 py-2 text-center whitespace-nowrap">
                                                     {(() => {
-                                                        const p = rec.password || '🟢 عادي';
-                                                        const isUrgent = p.includes('عاجل');
-                                                        const isMedium = p.includes('متوسط');
-                                                        const isRenewal = p.includes('تجديد');
-                                                        const isClient = p.includes('عميل');
-                                                        const isMoney = p.includes('دفع') || p.includes('مالي') || p.includes('سداد');
+                                                        const p = rec.password || 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ';
+                                                        const isUrgent = p.includes('Ø¹Ø§Ø¬Ù„');
+                                                        const isMedium = p.includes('Ù…ØªÙˆØ³Ø·');
+                                                        const isRenewal = p.includes('ØªØ¬Ø¯ÙŠØ¯');
+                                                        const isClient = p.includes('Ø¹Ù…ÙŠÙ„');
+                                                        const isMoney = p.includes('Ø¯ÙØ¹') || p.includes('Ù…Ø§Ù„ÙŠ') || p.includes('Ø³Ø¯Ø§Ø¯');
                                                         const cls = isUrgent
                                                             ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                                                             : isMedium
@@ -2362,11 +2700,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     {rec.offerActivated ? (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                                             <i className="fa-solid fa-circle-check"></i>
-                                                            <span>تم الإنجاز ✓</span>
+                                                            <span>ØªÙ… Ø§Ù„Ø¥Ù†Ø¬Ø§Ø² âœ“</span>
                                                         </span>
                                                     ) : (
                                                         (() => {
-                                                            const rem = calculateAccountReminder(rec.accountCreatedDate, rec.reminderDays, rec.created_at);
+                                                            const rem = getAccountReminder(rec);
                                                             return (
                                                                 <div className="flex items-center gap-1.5">
                                                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black border ${rem.badgeClass}`}>
@@ -2377,9 +2715,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
                                                                         className="text-[10px] font-bold text-slate-500 hover:text-emerald-600 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-                                                                        title="تعليم كمكتمل"
+                                                                        title="ØªØ¹Ù„ÙŠÙ… ÙƒÙ…ÙƒØªÙ…Ù„"
                                                                     >
-                                                                        إنجاز
+                                                                        Ø¥Ù†Ø¬Ø§Ø²
                                                                     </button>
                                                                 </div>
                                                             );
@@ -2406,7 +2744,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="تعديل"
+                                                                title="ØªØ¹Ø¯ÙŠÙ„"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -2415,9 +2753,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف ونقل إلى سلة المهملات"
+                                                                title="Ø­Ø°Ù ÙˆÙ†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
+                                                            </button>
+                                                        )}
+                                                        {currentSheetId === 'account_data' && getAccountCategory(rec) === 'chatgpt_shared' && (
+                                                            <button
+                                                                onClick={() => handleCopyChatGPTAccess(rec)}
+                                                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-black transition whitespace-nowrap ${
+                                                                    copiedField === `chatgpt_access_${rec.id}`
+                                                                        ? 'bg-emerald-600 text-white border-emerald-600'
+                                                                        : 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
+                                                                }`}
+                                                                title="Copy ChatGPT account"
+                                                            >
+                                                                <i className={`fa-solid ${copiedField === `chatgpt_access_${rec.id}` ? 'fa-check' : 'fa-file-lines'} text-[8px]`}></i>
+                                                                <span>Copy</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -2429,7 +2781,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     const isPassVisible = visibleSecrets[`${rec.id}_pass`] !== false;
                                     const isPass2Visible = visibleSecrets[`${rec.id}_pass2`] !== false;
                                     const isVisaVisible = visibleSecrets[`${rec.id}_visa`];
-                                    const isPersonalRecord = rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين';
+                                    const isPersonalRecord = rec.deviceType === 'Ø´Ø®ØµÙŠ' || rec.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
 
                                     return (
                                         <tr
@@ -2456,7 +2808,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     ? 'border-cyan-200 bg-white/65 text-cyan-950 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-100'
                                                                     : 'border-amber-200 bg-white/65 text-amber-950 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-100'
                                                             }`}
-                                                            title={rec.name || 'عميل بدون اسم'}
+                                                            title={rec.name || 'Ø¹Ù…ÙŠÙ„ Ø¨Ø¯ÙˆÙ† Ø§Ø³Ù…'}
                                                         >
                                                             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
                                                                 isPersonalRecord
@@ -2465,7 +2817,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             }`}>
                                                                 <i className="fa-solid fa-user text-[9px]"></i>
                                                             </span>
-                                                            <span className="truncate text-[11px] font-black">{rec.name || 'عميل بدون اسم'}</span>
+                                                            <span className="truncate text-[11px] font-black">{rec.name || 'Ø¹Ù…ÙŠÙ„ Ø¨Ø¯ÙˆÙ† Ø§Ø³Ù…'}</span>
                                                         </div>
                                                     </td>
                                                     <td className="px-1.5 py-1 max-w-[170px]">
@@ -2484,7 +2836,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                             ? 'text-cyan-500 hover:bg-cyan-100 hover:text-cyan-700 dark:hover:bg-cyan-800/60 dark:hover:text-cyan-100'
                                                                             : 'text-amber-500 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-800/60 dark:hover:text-amber-100'
                                                                     }`}
-                                                                    title="نسخ بيانات التواصل"
+                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªÙˆØ§ØµÙ„"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `phone_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2494,17 +2846,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 isPersonalRecord
                                                                     ? 'border-cyan-200 bg-white/65 text-cyan-600 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-300'
                                                                     : 'border-amber-200 bg-white/65 text-amber-600 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-300'
-                                                            }`}>لا يوجد تواصل</span>
+                                                            }`}>Ù„Ø§ ÙŠÙˆØ¬Ø¯ ØªÙˆØ§ØµÙ„</span>
                                                         )}
                                                     </td>
                                                     <td className="px-1.5 py-1 whitespace-nowrap">
                                                         <span className={`inline-flex min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-black ${
-                                                            rec.contactChannel === 'ماسنجر'
+                                                            rec.contactChannel === 'Ù…Ø§Ø³Ù†Ø¬Ø±'
                                                                 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
                                                                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                                                         }`}>
-                                                            <i className={`fa-brands ${rec.contactChannel === 'ماسنجر' ? 'fa-facebook-messenger' : 'fa-whatsapp'} text-[10px]`}></i>
-                                                            <span>{rec.contactChannel || 'واتساب'}</span>
+                                                            <i className={`fa-brands ${rec.contactChannel === 'Ù…Ø§Ø³Ù†Ø¬Ø±' ? 'fa-facebook-messenger' : 'fa-whatsapp'} text-[10px]`}></i>
+                                                            <span>{rec.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨'}</span>
                                                         </span>
                                                     </td>
                                                 </>
@@ -2515,7 +2867,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {rec.email ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         {rec.notes && (
-                                                            <span title={`ملاحظات: ${rec.notes}`} className="text-amber-500/80 hover:text-amber-500 cursor-help mr-0.5">
+                                                            <span title={`Ù…Ù„Ø§Ø­Ø¸Ø§Øª: ${rec.notes}`} className="text-amber-500/80 hover:text-amber-500 cursor-help mr-0.5">
                                                                 <i className="fa-solid fa-note-sticky text-[8px]"></i>
                                                             </span>
                                                         )}
@@ -2525,11 +2877,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         <button
                                                             onClick={() => handleCopy(rec.email, `em_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="نسخ الإيميل"
+                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `em_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
-                                                        {(currentSheetId === 'account_data' || currentSheetId === 'client_data') && (
+                                                        {(currentSheetId === 'client_data' || (currentSheetId === 'account_data' && getAccountCategory(rec) === 'adobe')) && (
                                                             <button
                                                                 onClick={() => handleCopyAdobeAccess(rec)}
                                                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-black transition whitespace-nowrap ${
@@ -2537,10 +2889,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         ? 'bg-emerald-600 text-white border-emerald-600'
                                                                         : 'bg-slate-900 text-white border-slate-900 hover:bg-slate-700'
                                                                 }`}
-                                                                title="نسخ الإيميل و Adobe Password برسالة جاهزة"
+                                                                title="Ù†Ø³Ø® Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ùˆ Adobe Password Ø¨Ø±Ø³Ø§Ù„Ø© Ø¬Ø§Ù‡Ø²Ø©"
                                                             >
                                                                 <i className={`fa-solid ${copiedField === `adobe_access_${rec.id}` ? 'fa-check' : 'fa-file-lines'} text-[8px]`}></i>
-                                                                <span>{currentSheetId === 'client_data' ? 'Adobe' : 'نسخ Adobe'}</span>
+                                                                <span>{currentSheetId === 'client_data' ? 'Adobe' : 'Ù†Ø³Ø® Adobe'}</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -2554,19 +2906,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {rec.password ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                            {isPassVisible ? rec.password : '••••••••'}
+                                                            {isPassVisible ? rec.password : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
                                                         </span>
                                                         <button
                                                             onClick={() => toggleSecret(rec.id, 'pass')}
                                                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 transition"
-                                                            title={isPassVisible ? 'إخفاء' : 'إظهار'}
+                                                            title={isPassVisible ? 'Ø¥Ø®ÙØ§Ø¡' : 'Ø¥Ø¸Ù‡Ø§Ø±'}
                                                         >
                                                             <i className={`fa-solid ${isPassVisible ? 'fa-eye-slash' : 'fa-eye'} text-[8px]`}></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleCopy(rec.password, `p1_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="نسخ الباسورد"
+                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `p1_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
@@ -2578,22 +2930,45 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                             {/* Password 2 */}
                                             <td className="px-1 py-1 font-medium">
-                                                {rec.password2 ? (
+                                                {currentSheetId === 'account_data' && getAccountCategory(rec) === 'capcut' ? (
+                                                    <span className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-sky-50 px-2 py-1 text-[10.5px] font-black text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+                                                        <i className="fa-solid fa-calendar-days text-[8px]"></i>
+                                                        {rec.capcutMonths || 1} months
+                                                    </span>
+                                                ) : currentSheetId === 'account_data' && getAccountCategory(rec) === 'chatgpt_shared' ? (
+                                                    rec.twoFaLink ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handleCopy(rec.twoFaLink, `twofa_col_${rec.id}`)}
+                                                            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10.5px] font-black transition ${
+                                                                copiedField === `twofa_col_${rec.id}`
+                                                                    ? 'border-emerald-600 bg-emerald-600 text-white'
+                                                                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300'
+                                                            }`}
+                                                            title={rec.twoFaLink}
+                                                        >
+                                                            <i className={`fa-solid ${copiedField === `twofa_col_${rec.id}` ? 'fa-check' : 'fa-link'} text-[8px]`}></i>
+                                                            2FA link
+                                                        </button>
+                                                    ) : (
+                                                        <span className="text-slate-300 dark:text-slate-600">-</span>
+                                                    )
+                                                ) : rec.password2 ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                            {isPass2Visible ? rec.password2 : '••••••••'}
+                                                            {isPass2Visible ? rec.password2 : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
                                                         </span>
                                                         <button
                                                             onClick={() => toggleSecret(rec.id, 'pass2')}
                                                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 transition"
-                                                            title={isPass2Visible ? 'إخفاء' : 'إظهار'}
+                                                            title={isPass2Visible ? 'Ø¥Ø®ÙØ§Ø¡' : 'Ø¥Ø¸Ù‡Ø§Ø±'}
                                                         >
                                                             <i className={`fa-solid ${isPass2Visible ? 'fa-eye-slash' : 'fa-eye'} text-[8px]`}></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleCopy(rec.password2, `p2_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="نسخ الباسورد 2"
+                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ 2"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `p2_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
@@ -2624,7 +2999,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 reminders_data: 'fa-solid fa-bell text-amber-500',
                                                             }[originId] || 'fa-solid fa-file text-slate-400';
 
-                                                            const name = rec.originSheetName || sheetsList.find(s => s.id === originId)?.name || 'بيانات الحساب';
+                                                            const name = rec.originSheetName || sheetsList.find(s => s.id === originId)?.name || 'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨';
 
                                                             return (
                                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${originBadgeStyles} whitespace-nowrap`}>
@@ -2658,7 +3033,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.selectedAccount, `acc_tr_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 p-0.5 transition"
-                                                                    title="نسخ بيانات الحساب"
+                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `acc_tr_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2680,7 +3055,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.duration, `dur_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                    title="نسخ مدة الاشتراك"
+                                                                    title="Ù†Ø³Ø® Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `dur_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2689,7 +3064,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <span className="text-slate-300 dark:text-slate-600">-</span>
                                                         )}
                                                     </td>
-                                                    {/* Remaining Time (المدة المتبقية) */}
+                                                    {/* Remaining Time (Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {(() => {
                                                             const remaining = calculateRemainingTime(rec.startDate, rec.duration, rec.created_at);
@@ -2716,8 +3091,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             }[remaining.status] || 'fa-regular fa-clock text-[8px] text-slate-400';
 
                                                             const tooltip = remaining.status === 'lifetime'
-                                                                ? 'اشتراك مدى الحياة'
-                                                                : `تاريخ البداية: ${remaining.startDate || '-'} | تاريخ الانتهاء: ${remaining.endDate || '-'}`;
+                                                                ? 'Ø§Ø´ØªØ±Ø§Ùƒ Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©'
+                                                                : `ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©: ${remaining.startDate || '-'} | ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ù†ØªÙ‡Ø§Ø¡: ${remaining.endDate || '-'}`;
 
                                                             return (
                                                                 <div className="flex items-center gap-1" title={tooltip}>
@@ -2728,7 +3103,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(remaining.text, `rem_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="نسخ المدة المتبقية"
+                                                                        title="Ù†Ø³Ø® Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `rem_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
@@ -2736,41 +3111,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             );
                                                         })()}
                                                     </td>
-                                                    {/* Device Type (نوع الاشتراك: شخصي أم مشترك) */}
+                                                    {/* Device Type (Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ: Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {isPersonalRecord ? (
                                                             <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-black text-cyan-700 shadow-xs whitespace-nowrap dark:border-cyan-800/70 dark:bg-cyan-950/35 dark:text-cyan-300">
                                                                 <i className="fa-solid fa-mobile-screen-button text-[10px]"></i>
-                                                                <span>جهازين</span>
+                                                                <span>Ø¬Ù‡Ø§Ø²ÙŠÙ†</span>
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 shadow-xs whitespace-nowrap dark:border-amber-800/70 dark:bg-amber-950/35 dark:text-amber-300">
                                                                 <i className="fa-solid fa-mobile-screen text-[10px]"></i>
-                                                                <span>جهاز</span>
+                                                                <span>Ø¬Ù‡Ø§Ø²</span>
                                                             </span>
                                                         )}
                                                     </td>
-                                                    {/* Payment Status (حالة الدفع: مدفوع / غير مدفوع) */}
+                                                    {/* Payment Status (Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹: Ù…Ø¯ÙÙˆØ¹ / ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹) */}
                                                     <td className="px-1.5 py-1 font-medium">
-                                                        {rec.paymentStatus === 'غير مدفوع' ? (
+                                                        {rec.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' ? (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleTogglePaymentStatus(rec.id)}
                                                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/70 dark:border-rose-800/60 shadow-xs cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/60 transition whitespace-nowrap"
-                                                                title="انقر لتغيير الحالة إلى مدفوع"
+                                                                title="Ø§Ù†Ù‚Ø± Ù„ØªØºÙŠÙŠØ± Ø§Ù„Ø­Ø§Ù„Ø© Ø¥Ù„Ù‰ Ù…Ø¯ÙÙˆØ¹"
                                                             >
                                                                 <i className="fa-solid fa-circle-xmark text-[8px] text-rose-500"></i>
-                                                                <span>غير مدفوع</span>
+                                                                <span>ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹</span>
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleTogglePaymentStatus(rec.id)}
                                                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition whitespace-nowrap"
-                                                                title="انقر لتغيير الحالة إلى غير مدفوع"
+                                                                title="Ø§Ù†Ù‚Ø± Ù„ØªØºÙŠÙŠØ± Ø§Ù„Ø­Ø§Ù„Ø© Ø¥Ù„Ù‰ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹"
                                                             >
                                                                 <i className="fa-solid fa-circle-check text-[8px] text-emerald-500"></i>
-                                                                <span>مدفوع</span>
+                                                                <span>Ù…Ø¯ÙÙˆØ¹</span>
                                                             </button>
                                                         )}
                                                     </td>
@@ -2791,7 +3166,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(effectiveDate, `acd_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="نسخ تاريخ الإنشاء"
+                                                                        title="Ù†Ø³Ø® ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `acd_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
@@ -2804,27 +3179,28 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {(() => {
                                                             const effectiveDate = rec.accountCreatedDate || (rec.created_at ? String(rec.created_at).slice(0, 10) : '');
-                                                            if (rec.offerActivated) {
+                                                            const category = getAccountCategory(rec);
+                                                            if (category === 'adobe' && rec.offerActivated) {
                                                                 return (
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
                                                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 transition whitespace-nowrap"
-                                                                        title={rec.offerActivatedAt ? `لا يحتاج تذكير - تم تفعيل العرض ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : 'لا يحتاج تذكير'}
+                                                                        title={rec.offerActivatedAt ? `Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ± - ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶ ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : 'Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ±'}
                                                                     >
                                                                         <i className="fa-solid fa-circle-check text-[8px]"></i>
-                                                                        <span>لا يحتاج تذكير</span>
+                                                                        <span>Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ±</span>
                                                                     </button>
                                                                 );
                                                             }
-                                                            const reminder = calculateAccountReminder(effectiveDate, rec.reminderDays, rec.created_at);
+                                                            const reminder = getAccountReminder(rec);
                                                             if (reminder.status === 'none') {
                                                                 return <span className="text-slate-300 dark:text-slate-600">-</span>;
                                                             }
                                                             return (
                                                                 <div className="flex items-center gap-1">
                                                                     <span
-                                                                        title={`تاريخ الإنشاء: ${reminder.createdDate || effectiveDate || '-'} | موعد التذكير: ${reminder.targetDate || '-'} (${reminder.reminderDays || rec.reminderDays || '-'} يوم)`}
+                                                                        title={`ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡: ${reminder.createdDate || effectiveDate || '-'} | Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±: ${reminder.targetDate || '-'} (${reminder.reminderDays || rec.reminderDays || '-'} ÙŠÙˆÙ…)`}
                                                                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
                                                                             reminder.status === 'expired'
                                                                                 ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60 shadow-xs'
@@ -2849,22 +3225,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(reminder.text, `rem_acc_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="نسخ حالة التذكير"
+                                                                        title="Ù†Ø³Ø® Ø­Ø§Ù„Ø© Ø§Ù„ØªØ°ÙƒÙŠØ±"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `rem_acc_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
-                                                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black border transition whitespace-nowrap ${
+                                                                        className={`${category !== 'adobe' ? 'hidden' : 'inline-flex'} items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black border transition whitespace-nowrap ${
                                                                             rec.offerActivated
                                                                                 ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                                                                 : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-emerald-400 hover:text-emerald-700'
                                                                         }`}
-                                                                        title={rec.offerActivated ? `تم تفعيل العرض${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'تعليم أن عرض التفعيل اتعمل على الحساب'}
+                                                                        title={rec.offerActivated ? `ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'ØªØ¹Ù„ÙŠÙ… Ø£Ù† Ø¹Ø±Ø¶ Ø§Ù„ØªÙØ¹ÙŠÙ„ Ø§ØªØ¹Ù…Ù„ Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø³Ø§Ø¨'}
                                                                     >
                                                                         <i className={`fa-solid ${rec.offerActivated ? 'fa-check' : 'fa-bolt'} text-[8px]`}></i>
-                                                                        <span>{rec.offerActivated ? 'العرض اتفعل' : 'تم تفعيل العرض'}</span>
+                                                                        <span>{rec.offerActivated ? 'Ø§Ù„Ø¹Ø±Ø¶ Ø§ØªÙØ¹Ù„' : 'ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'}</span>
                                                                     </button>
                                                                 </div>
                                                             );
@@ -2872,9 +3248,42 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     </td>
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {(() => {
+                                                            if (getAccountCategory(rec) === 'capcut') {
+                                                                return (
+                                                                    <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-900 px-2.5 py-1 text-[10px] font-black text-white shadow-sm dark:border-slate-700">
+                                                                        <i className="fa-solid fa-user-check text-[8px]"></i>
+                                                                        Personal
+                                                                    </span>
+                                                                );
+                                                            }
                                                             const currentUses = Math.max(0, Number(rec.currentUses || 0));
                                                             const maxUses = Math.max(1, Number(rec.maxUses || 2));
-                                                            // اشتق الحالة الصحيحة — الأولوية للـ accountUsageStatus المحفوظ
+                                                            // Ø§Ø´ØªÙ‚ Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„ØµØ­ÙŠØ­Ø© â€” Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© Ù„Ù„Ù€ accountUsageStatus Ø§Ù„Ù…Ø­ÙÙˆØ¸
+                                                            if (getAccountCategory(rec) === 'chatgpt_shared') {
+                                                                return (
+                                                                    <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 p-0.5 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleSetChatGPTUsers(rec.id, currentUses - 1)}
+                                                                            className="flex h-5 w-5 items-center justify-center rounded-md border border-emerald-200 bg-white text-[10px] font-black hover:bg-emerald-100 dark:border-emerald-800 dark:bg-slate-900"
+                                                                            title="Decrease users"
+                                                                        >
+                                                                            -
+                                                                        </button>
+                                                                        <span className="min-w-[54px] text-center text-[10px] font-black">
+                                                                            {currentUses} users
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => handleSetChatGPTUsers(rec.id, currentUses + 1)}
+                                                                            className="flex h-5 w-5 items-center justify-center rounded-md border border-emerald-200 bg-white text-[10px] font-black hover:bg-emerald-100 dark:border-emerald-800 dark:bg-slate-900"
+                                                                            title="Increase users"
+                                                                        >
+                                                                            +
+                                                                        </button>
+                                                                    </div>
+                                                                );
+                                                            }
                                                             const status = rec.accountUsageStatus || (
                                                                 currentUses <= 0 ? 'available' :
                                                                 currentUses >= maxUses ? 'shared_full' :
@@ -2883,50 +3292,141 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             const optionClass = (active, color) => {
                                                                 const colors = {
                                                                     green: active ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100',
+                                                                    reused: active ? 'bg-orange-500 text-white border-orange-500 shadow-sm shadow-orange-500/20' : 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100',
                                                                     dark:  active ? 'bg-slate-900 text-white border-slate-900'   : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100',
                                                                     amber: active ? 'bg-amber-500 text-white border-amber-500'   : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100',
                                                                     rose:  active ? 'bg-rose-600 text-white border-rose-600'     : 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100',
                                                                 };
                                                                 return colors[color];
                                                             };
+                                                            const isReused = isReusedAccount(rec);
+                                                            const remainingUses = Math.max(0, maxUses - currentUses);
+                                                            const reusedAvailableLabel = remainingUses >= maxUses
+                                                                ? maxUses + ' devices available - reused'
+                                                                : remainingUses === 1
+                                                                ? '1 device available - reused'
+                                                                : remainingUses + ' devices available - reused';
                                                             return (
                                                                 <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 whitespace-nowrap">
-                                                                    {/* متاح: 0/2 slots */}
+                                                                    {/* Ù…ØªØ§Ø­: 0/2 slots */}
                                                                     <button
                                                                         type="button"
-                                                                        onClick={() => handleSetAccountUsage(rec.id, 0, 'available')}
-                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'available', 'green')}`}
-                                                                        title="الحساب لم يخرج لأي عميل — 0/2 slots"
+                                                                        onClick={() => handleSetAccountUsage(rec.id, isReused && currentUses > 0 ? currentUses : 0, isReused && currentUses > 0 ? status : 'available')}
+                                                                        className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass((status === 'available' || status === 'available_reused_after_expiry') || (isReused && remainingUses > 0), isReused ? 'reused' : 'green')}`}
+                                                                        title="Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„Ù… ÙŠØ®Ø±Ø¬ Ù„Ø£ÙŠ Ø¹Ù…ÙŠÙ„ â€” 0/2 slots"
                                                                     >
-                                                                        متاح
+                                                                        {isReused ? reusedAvailableLabel : 'Available'}
                                                                     </button>
-                                                                    {/* شخصي: الحساب كله لشخص واحد — 2/2 slots */}
+                                                                    {/* Ø´Ø®ØµÙŠ: Ø§Ù„Ø­Ø³Ø§Ø¨ ÙƒÙ„Ù‡ Ù„Ø´Ø®Øµ ÙˆØ§Ø­Ø¯ â€” 2/2 slots */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, maxUses, 'personal_full')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'personal_full', 'dark')}`}
-                                                                        title="شخصي — الحساب كله لعميل واحد (2/2 slots)"
+                                                                        title="Ø´Ø®ØµÙŠ â€” Ø§Ù„Ø­Ø³Ø§Ø¨ ÙƒÙ„Ù‡ Ù„Ø¹Ù…ÙŠÙ„ ÙˆØ§Ø­Ø¯ (2/2 slots)"
                                                                     >
-                                                                        شخصي
+                                                                        Ø´Ø®ØµÙŠ
                                                                     </button>
-                                                                    {/* مشترك جهاز: 1/2 slots مستخدم — slot واحد متبقي */}
+                                                                    {/* Ù…Ø´ØªØ±Ùƒ Ø¬Ù‡Ø§Ø²: 1/2 slots Ù…Ø³ØªØ®Ø¯Ù… â€” slot ÙˆØ§Ø­Ø¯ Ù…ØªØ¨Ù‚ÙŠ */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, 1, 'shared_one_device')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_one_device', 'amber')}`}
-                                                                        title="مشترك — جهاز واحد خرج، slot واحد متبقي (1/2 slots)"
+                                                                        title="Ù…Ø´ØªØ±Ùƒ â€” Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯ Ø®Ø±Ø¬ØŒ slot ÙˆØ§Ø­Ø¯ Ù…ØªØ¨Ù‚ÙŠ (1/2 slots)"
                                                                     >
-                                                                        مشترك جهاز
+                                                                        Ù…Ø´ØªØ±Ùƒ Ø¬Ù‡Ø§Ø²
                                                                     </button>
-                                                                    {/* مشترك كامل: 2/2 slots — الجهازين خرجوا */}
+                                                                    {/* Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„: 2/2 slots â€” Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ø®Ø±Ø¬ÙˆØ§ */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, maxUses, 'shared_full')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_full', 'rose')}`}
-                                                                        title="مشترك كامل — الجهازين خرجوا (2/2 slots)"
+                                                                        title="Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„ â€” Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ø®Ø±Ø¬ÙˆØ§ (2/2 slots)"
                                                                     >
-                                                                        مشترك كامل
+                                                                        Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„
                                                                     </button>
+                                                                </div>
+                                                            );
+                                                        })()}
+                                                    </td>
+                                                    <td className="px-1.5 py-1 font-medium">
+                                                        {(() => {
+                                                            const category = getAccountCategory(rec);
+                                                            if (category === 'capcut') {
+                                                                const reminder = calculateCapCutMonthlyReminder(rec);
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-1">
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black border whitespace-nowrap bg-sky-50 text-sky-700 border-sky-200">
+                                                                            <i className="fa-solid fa-calendar-days text-[8px]"></i>
+                                                                            {rec.capcutMonths || 1} months
+                                                                        </span>
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                                                            <i className="fa-solid fa-play text-[8px]"></i>
+                                                                            {rec.accountCreatedDate || rec.startDate || '-'}
+                                                                        </span>
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                                                            <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                            {reminder.targetDate || '-'}
+                                                                        </span>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            if (category === 'chatgpt_shared') {
+                                                                const reminder = calculateChatGPTMonthlyReminder(rec);
+                                                                const currentUses = Math.max(0, Number(rec.currentUses || 0));
+                                                                const maxUses = Math.max(1, Number(rec.maxUses || rec.sharedUsers || 1));
+                                                                return (
+                                                                    <div className="flex flex-wrap items-center gap-1">
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                                                                            <i className="fa-solid fa-users text-[8px]"></i>
+                                                                            {currentUses} users
+                                                                        </span>
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-50 text-slate-600 border border-slate-200 whitespace-nowrap">
+                                                                            <i className="fa-solid fa-play text-[8px]"></i>
+                                                                            {rec.accountCreatedDate || rec.startDate || '-'}
+                                                                        </span>
+                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 whitespace-nowrap">
+                                                                            <i className="fa-regular fa-calendar text-[8px]"></i>
+                                                                            {reminder.targetDate || '-'}
+                                                                        </span>
+                                                                        {reminder.days === 0 && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleRenewChatGPTAccount(rec.id)}
+                                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-slate-900 text-white border border-slate-900 whitespace-nowrap hover:bg-slate-700"
+                                                                            >
+                                                                                <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                                Renew
+                                                                            </button>
+                                                                        )}
+                                                                        {rec.twoFaLink && (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => handleCopy(rec.twoFaLink, `twofa_${rec.id}`)}
+                                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 whitespace-nowrap hover:bg-indigo-100"
+                                                                            >
+                                                                                <i className={`fa-solid ${copiedField === `twofa_${rec.id}` ? 'fa-check' : 'fa-link'} text-[8px]`}></i>
+                                                                                2FA
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            const isReused = isReusedAccount(rec);
+                                                            return (
+                                                                <div className="flex flex-wrap items-center gap-1">
+                                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+                                                                        <i className="fa-solid fa-palette text-[8px]"></i>
+                                                                        Adobe
+                                                                    </span>
+                                                                    {isReused && (
+                                                                        <span
+                                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
+                                                                            title={rec.releasedAccountAt ? `Returned to stock on ${String(rec.releasedAccountAt).slice(0, 10)}` : 'Returned to stock after no renewal'}
+                                                                        >
+                                                                            <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                            Reused after expiry
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             );
                                                         })()}
@@ -2944,7 +3444,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.invoiceNumber, `inv_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-amber-600 p-0.5"
-                                                                    title="نسخ رقم الفاتورة"
+                                                                    title="Ù†Ø³Ø® Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø©"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `inv_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2959,7 +3459,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         {rec.visa ? (
                                                             <div className="flex items-center gap-1 dir-ltr justify-end">
                                                                 <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                                    {isVisaVisible ? rec.visa : '•••• •••• •••• ' + rec.visa.slice(-4)}
+                                                                    {isVisaVisible ? rec.visa : 'â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ ' + rec.visa.slice(-4)}
                                                                 </span>
                                                                 <button
                                                                     onClick={() => toggleSecret(rec.id, 'visa')}
@@ -2989,7 +3489,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.visaAccount, `va_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 p-0.5"
-                                                                    title="نسخ حساب الفيزا"
+                                                                    title="Ù†Ø³Ø® Ø­Ø³Ø§Ø¨ Ø§Ù„ÙÙŠØ²Ø§"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `va_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2999,7 +3499,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         )}
                                                     </td>
 
-                                                    {/* Account Data (بيانات الحساب) */}
+                                                    {/* Account Data (Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {rec.selectedAccount ? (
                                                             <div className="flex items-center gap-1">
@@ -3010,7 +3510,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.selectedAccount, `acc_c_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 p-0.5 transition"
-                                                                    title="نسخ بيانات الحساب"
+                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `acc_c_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3029,16 +3529,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         <button
                                                             onClick={() => handleRestoreRecord(rec)}
                                                             className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
-                                                            title="استرداد السجل إلى شيته الأصلي"
+                                                            title="Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø´ÙŠØªÙ‡ Ø§Ù„Ø£ØµÙ„ÙŠ"
                                                         >
                                                             <i className="fa-solid fa-rotate-left text-[8px]"></i>
-                                                            <span>استرداد</span>
+                                                            <span>Ø§Ø³ØªØ±Ø¯Ø§Ø¯</span>
                                                         </button>
                                                         {canEmptyTrash && (
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف نهائي"
+                                                                title="Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
@@ -3050,7 +3550,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="تعديل"
+                                                                title="ØªØ¹Ø¯ÙŠÙ„"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -3059,13 +3559,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف ونقل إلى سلة المهملات"
+                                                                title="Ø­Ø°Ù ÙˆÙ†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
                                                         )}
                                                         {!canEdit && !canDelete && (
-                                                            <span className="text-[9px] text-slate-400">عرض فقط</span>
+                                                            <span className="text-[9px] text-slate-400">Ø¹Ø±Ø¶ ÙÙ‚Ø·</span>
                                                         )}
                                                     </div>
                                                 )}
@@ -3082,7 +3582,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 {pageSize !== 'all' && totalPages > 1 && (
                     <div className="p-4 bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                         <span className="text-slate-500 dark:text-slate-400">
-                            عرض الصفحة <b className="text-slate-800 dark:text-white">{currentPage}</b> من أصل <b className="text-slate-800 dark:text-white">{totalPages}</b> (إجمالي {filteredRecords.length} سجل)
+                            Ø¹Ø±Ø¶ Ø§Ù„ØµÙØ­Ø© <b className="text-slate-800 dark:text-white">{currentPage}</b> Ù…Ù† Ø£ØµÙ„ <b className="text-slate-800 dark:text-white">{totalPages}</b> (Ø¥Ø¬Ù…Ø§Ù„ÙŠ {filteredRecords.length} Ø³Ø¬Ù„)
                         </span>
 
                         <div className="flex items-center gap-1.5">
@@ -3098,14 +3598,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 disabled={currentPage === 1}
                                 className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
                             >
-                                السابق
+                                Ø§Ù„Ø³Ø§Ø¨Ù‚
                             </button>
                             <button
                                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                 disabled={currentPage === totalPages}
                                 className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
                             >
-                                التالي
+                                Ø§Ù„ØªØ§Ù„ÙŠ
                             </button>
                             <button
                                 onClick={() => setCurrentPage(totalPages)}
@@ -3131,18 +3631,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-lg text-slate-800 dark:text-white leading-tight">
-                                        {editingRecord ? 'تعديل السجل' : 'إضافة بيان جديد'}
+                                        {editingRecord ? 'ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø³Ø¬Ù„' : 'Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù† Ø¬Ø¯ÙŠØ¯'}
                                     </h3>
                                     <p className="text-xs text-slate-400">
-                                        الشيت الحالي: <span className="font-bold text-indigo-600 dark:text-indigo-400">{currentSheet.name}</span>
+                                        Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø­Ø§Ù„ÙŠ: <span className="font-bold text-indigo-600 dark:text-indigo-400">{currentSheet.name}</span>
                                     </p>
                                 </div>
                             </div>
-                            {/* Prominent Cancel / Close Button (علامة الإلغاء) */}
+                            {/* Prominent Cancel / Close Button (Ø¹Ù„Ø§Ù…Ø© Ø§Ù„Ø¥Ù„ØºØ§Ø¡) */}
                             <button
                                 type="button"
                                 onClick={() => setShowAddModal(false)}
-                                title="إلغاء وإغلاق النافذة"
+                                title="Ø¥Ù„ØºØ§Ø¡ ÙˆØ¥ØºÙ„Ø§Ù‚ Ø§Ù„Ù†Ø§ÙØ°Ø©"
                                 className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition border border-slate-200/60 dark:border-slate-700/60 hover:border-rose-300 dark:hover:border-rose-800/80 shadow-xs cursor-pointer group"
                             >
                                 <i className="fa-solid fa-xmark text-base group-hover:scale-110 transition-transform"></i>
@@ -3165,7 +3665,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             }`}
                                         >
                                             <i className="fa-solid fa-box-open text-[11px]"></i>
-                                            <span>اختيار من المتاح</span>
+                                            <span>Ø§Ø®ØªÙŠØ§Ø± Ù…Ù† Ø§Ù„Ù…ØªØ§Ø­</span>
                                         </button>
                                         <button
                                             type="button"
@@ -3180,7 +3680,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             }`}
                                         >
                                             <i className="fa-solid fa-keyboard text-[11px]"></i>
-                                            <span>تسجيل يدوي</span>
+                                            <span>ØªØ³Ø¬ÙŠÙ„ ÙŠØ¯ÙˆÙŠ</span>
                                         </button>
                                     </div>
 
@@ -3188,10 +3688,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between gap-2">
                                                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                    الميل المتباع من بيانات الحساب
+                                                    Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ Ù…Ù† Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨
                                                 </label>
                                                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                    المعروض: {displayedAvailableAccountChoices.length} / {availableAccountChoices.length}
+                                                    Ø§Ù„Ù…Ø¹Ø±ÙˆØ¶: {displayedAvailableAccountChoices.length} / {availableAccountChoices.length}
                                                 </span>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
@@ -3201,7 +3701,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         type="text"
                                                         value={availableAccountSearch}
                                                         onChange={(e) => setAvailableAccountSearch(e.target.value)}
-                                                        placeholder="بحث في الإيميلات المتاحة..."
+                                                        placeholder="Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ø§Ù„Ù…ØªØ§Ø­Ø©..."
                                                         className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 pr-8 pl-3 text-xs font-bold text-slate-800 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                                                     />
                                                 </div>
@@ -3209,11 +3709,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     value={availableAccountSort}
                                                     onChange={(e) => setAvailableAccountSort(e.target.value)}
                                                     className="rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                                                    title="ترتيب الإيميلات"
+                                                    title="ØªØ±ØªÙŠØ¨ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª"
                                                 >
-                                                    <option value="newest">الأحدث بتاريخ الإنشاء</option>
-                                                    <option value="oldest">الأقدم بتاريخ الإنشاء</option>
-                                                    <option value="email">حسب الإيميل</option>
+                                                    <option value="newest">Ø§Ù„Ø£Ø­Ø¯Ø« Ø¨ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</option>
+                                                    <option value="oldest">Ø§Ù„Ø£Ù‚Ø¯Ù… Ø¨ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</option>
+                                                    <option value="email">Ø­Ø³Ø¨ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„</option>
                                                 </select>
                                             </div>
                                             {displayedAvailableAccountChoices.length > 0 ? (
@@ -3224,13 +3724,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         const remaining = Math.max(0, maxUses - currentUses);
                                                         const accountEmail = acc.email || acc.selectedAccount || '';
                                                         const isFull = currentUses === 0;
-                                                        const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
+                                                        const isPersonalChosen = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
                                                         const disabledForPersonal = isPersonalChosen && !isFull;
                                                         const selectedValue = String(formData.selectedAccount || '').toLowerCase();
                                                         const isSelected = selectedValue
                                                             && [acc.id, acc.email, acc.selectedAccount].some(value => String(value || '').toLowerCase() === selectedValue);
-                                                        const availabilityLabel = isFull && maxUses >= 2 ? 'جهازين متاحين' : `متبقي ${remaining} جهاز`;
-                                                        const availabilityHint = isFull && maxUses >= 2 ? 'ينفع شخصي أو مشترك' : 'ينفع مشترك فقط';
+                                                        const availabilityLabel = isFull && maxUses >= 2 ? 'Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù…ØªØ§Ø­ÙŠÙ†' : `Ù…ØªØ¨Ù‚ÙŠ ${remaining} Ø¬Ù‡Ø§Ø²`;
+                                                        const availabilityHint = isFull && maxUses >= 2 ? 'Personal or shared available' : 'Shared only';
+                                                        const isReusedAfterExpiry = isReusedAccount(acc);
 
                                                         return (
                                                             <button
@@ -3253,7 +3754,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         <div dir="ltr" className={`font-mono text-xs font-black truncate text-left ${
                                                                             isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'
                                                                         }`}>
-                                                                            {accountEmail || 'حساب بدون ميل'}
+                                                                            {accountEmail || 'Ø­Ø³Ø§Ø¨ Ø¨Ø¯ÙˆÙ† Ù…ÙŠÙ„'}
                                                                         </div>
                                                                         <div className={`mt-1 text-[11px] font-bold ${
                                                                             isSelected ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'
@@ -3273,12 +3774,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                             <i className={`fa-solid ${isFull ? 'fa-mobile-screen-button' : 'fa-mobile-screen'} text-[10px]`}></i>
                                                                             {availabilityLabel}
                                                                         </span>
+                                                                        {isReusedAfterExpiry && (
+                                                                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black border ${
+                                                                                isSelected
+                                                                                    ? 'bg-white/15 text-white border-white/30'
+                                                                                    : 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800'
+                                                                            }`}>
+                                                                                <i className="fa-solid fa-rotate text-[9px]"></i>
+                                                                                Reused after expiry
+                                                                            </span>
+                                                                        )}
                                                                         <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-black ${
                                                                             isSelected
                                                                                 ? 'bg-white/15 text-white'
                                                                                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300'
                                                                         }`}>
-                                                                            مستخدم {currentUses}/{maxUses}
+                                                                            Ù…Ø³ØªØ®Ø¯Ù… {currentUses}/{maxUses}
                                                                         </span>
                                                                     </div>
                                                                 </div>
@@ -3290,20 +3801,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 px-4 py-5 text-center">
                                                     <i className="fa-solid fa-inbox text-slate-300 dark:text-slate-600 text-xl mb-2"></i>
                                                     <div className="text-xs font-black text-slate-500 dark:text-slate-400">
-                                                        {availableAccountSearch ? 'لا توجد نتائج مطابقة للبحث' : 'لا توجد إيميلات متاحة حاليا'}
+                                                        {availableAccountSearch ? 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¬ Ù…Ø·Ø§Ø¨Ù‚Ø© Ù„Ù„Ø¨Ø­Ø«' : 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…ØªØ§Ø­Ø© Ø­Ø§Ù„ÙŠØ§'}
                                                     </div>
                                                 </div>
                                             )}
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                {formData.deviceType === 'شخصي'
-                                                    ? '🟢 الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (الجهازين معاً لم يتم استخدام أي منهما).'
-                                                    : '🟣 الاشتراك المشترك يمكن تسكينه على حساب متاح بالكامل أو حساب مشترك متبقي فيه جهاز.'}
+                                                {formData.deviceType === 'Ø´Ø®ØµÙŠ'
+                                                    ? 'ðŸŸ¢ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ ÙŠØªØ·Ù„Ø¨ Ø­Ø³Ø§Ø¨Ø§Ù‹ Ù…ØªØ§Ø­Ø§Ù‹ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ (Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù…Ø¹Ø§Ù‹ Ù„Ù… ÙŠØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø£ÙŠ Ù…Ù†Ù‡Ù…Ø§).'
+                                                    : 'ðŸŸ£ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ù…Ø´ØªØ±Ùƒ ÙŠÙ…ÙƒÙ† ØªØ³ÙƒÙŠÙ†Ù‡ Ø¹Ù„Ù‰ Ø­Ø³Ø§Ø¨ Ù…ØªØ§Ø­ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ø£Ùˆ Ø­Ø³Ø§Ø¨ Ù…Ø´ØªØ±Ùƒ Ù…ØªØ¨Ù‚ÙŠ ÙÙŠÙ‡ Ø¬Ù‡Ø§Ø².'}
                                             </p>
                                         </div>
                                     ) : (
                                         <div className="space-y-1.5">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                الميل المتباع يدويًا
+                                                Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ ÙŠØ¯ÙˆÙŠÙ‹Ø§
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-pen absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3311,7 +3822,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.selectedAccount}
                                                     onChange={(e) => setFormData({ ...formData, selectedAccount: e.target.value })}
-                                                    placeholder="اكتب الميل المتباع يدويًا..."
+                                                    placeholder="Ø§ÙƒØªØ¨ Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ ÙŠØ¯ÙˆÙŠÙ‹Ø§..."
                                                     className="w-full bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-slate-400 focus:border-slate-600 rounded-xl pr-9 pl-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500/20 dir-ltr text-right"
                                                 />
                                             </div>
@@ -3323,14 +3834,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 space-y-3">
                                     <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-black text-xs">
                                         <i className="fa-solid fa-address-card text-indigo-500"></i>
-                                        <span>بيانات العميل والتواصل</span>
-                                        <span className="text-[10px] font-bold text-slate-400">اختياري</span>
+                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„ ÙˆØ§Ù„ØªÙˆØ§ØµÙ„</span>
+                                        <span className="text-[10px] font-bold text-slate-400">Ø§Ø®ØªÙŠØ§Ø±ÙŠ</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                اسم العميل
+                                                Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-user absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3338,7 +3849,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.name}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                                    placeholder="اسم العميل إن وجد"
+                                                    placeholder="Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„ Ø¥Ù† ÙˆØ¬Ø¯"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -3346,7 +3857,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                رقم الهاتف أو يوزر واتساب
+                                                Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ Ø£Ùˆ ÙŠÙˆØ²Ø± ÙˆØ§ØªØ³Ø§Ø¨
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3354,7 +3865,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.phone}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                                                    placeholder="010... أو username"
+                                                    placeholder="010... Ø£Ùˆ username"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -3363,10 +3874,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                            وسيلة التواصل
+                                            ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {['واتساب', 'ماسنجر'].map(channel => (
+                                            {['ÙˆØ§ØªØ³Ø§Ø¨', 'Ù…Ø§Ø³Ù†Ø¬Ø±'].map(channel => (
                                                 <button
                                                     key={channel}
                                                     type="button"
@@ -3377,7 +3888,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
                                                     }`}
                                                 >
-                                                    <i className={`fa-brands ${channel === 'واتساب' ? 'fa-whatsapp' : 'fa-facebook-messenger'} text-sm`}></i>
+                                                    <i className={`fa-brands ${channel === 'ÙˆØ§ØªØ³Ø§Ø¨' ? 'fa-whatsapp' : 'fa-facebook-messenger'} text-sm`}></i>
                                                     <span>{channel}</span>
                                                 </button>
                                             ))}
@@ -3390,7 +3901,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Reminder Title */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                                            عنوان التذكير أو المطلوب تذكيره <span className="text-rose-500">*</span>
+                                            Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ± Ø£Ùˆ Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ ØªØ°ÙƒÙŠØ±Ù‡ <span className="text-rose-500">*</span>
                                         </label>
                                         <div className="relative">
                                             <i className="fa-solid fa-bell absolute right-3.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs"></i>
@@ -3399,7 +3910,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 required
                                                 value={formData.email}
                                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                                placeholder="مثال: تجديد اشتراك أدوبي لعميل، سداد فيزا، اتصال هاتفي..."
+                                                placeholder="Ù…Ø«Ø§Ù„: ØªØ¬Ø¯ÙŠØ¯ Ø§Ø´ØªØ±Ø§Ùƒ Ø£Ø¯ÙˆØ¨ÙŠ Ù„Ø¹Ù…ÙŠÙ„ØŒ Ø³Ø¯Ø§Ø¯ ÙÙŠØ²Ø§ØŒ Ø§ØªØµØ§Ù„ Ù‡Ø§ØªÙÙŠ..."
                                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-bold"
                                             />
                                         </div>
@@ -3408,18 +3919,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Priority / Category */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                                            الأولوية والتصنيف
+                                            Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© ÙˆØ§Ù„ØªØµÙ†ÙŠÙ
                                         </label>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                             {[
-                                                { id: '🔴 عاجل جداً', label: '🔴 عاجل جداً' },
-                                                { id: '🟡 أولوية متوسطة', label: '🟡 أولوية متوسطة' },
-                                                { id: '🟢 عادي', label: '🟢 عادي' },
-                                                { id: '🟣 تجديد واشتراك', label: '🟣 تجديد واشتراك' },
-                                                { id: '🔵 متابعة عميل', label: '🔵 متابعة عميل' },
-                                                { id: '🟠 سداد مالي / دفع', label: '🟠 سداد مالي / دفع' },
+                                                { id: 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹', label: 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹' },
+                                                { id: 'ðŸŸ¡ Ø£ÙˆÙ„ÙˆÙŠØ© Ù…ØªÙˆØ³Ø·Ø©', label: 'ðŸŸ¡ Ø£ÙˆÙ„ÙˆÙŠØ© Ù…ØªÙˆØ³Ø·Ø©' },
+                                                { id: 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ', label: 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ' },
+                                                { id: 'ðŸŸ£ ØªØ¬Ø¯ÙŠØ¯ ÙˆØ§Ø´ØªØ±Ø§Ùƒ', label: 'ðŸŸ£ ØªØ¬Ø¯ÙŠØ¯ ÙˆØ§Ø´ØªØ±Ø§Ùƒ' },
+                                                { id: 'ðŸ”µ Ù…ØªØ§Ø¨Ø¹Ø© Ø¹Ù…ÙŠÙ„', label: 'ðŸ”µ Ù…ØªØ§Ø¨Ø¹Ø© Ø¹Ù…ÙŠÙ„' },
+                                                { id: 'ðŸŸ  Ø³Ø¯Ø§Ø¯ Ù…Ø§Ù„ÙŠ / Ø¯ÙØ¹', label: 'ðŸŸ  Ø³Ø¯Ø§Ø¯ Ù…Ø§Ù„ÙŠ / Ø¯ÙØ¹' },
                                             ].map(opt => {
-                                                const currentVal = formData.password || '🔴 عاجل جداً';
+                                                const currentVal = formData.password || 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹';
                                                 const isSel = currentVal === opt.id || currentVal.includes(opt.id.slice(2, 6));
                                                 return (
                                                     <button
@@ -3444,7 +3955,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div className="flex items-center justify-between">
                                             <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
                                                 <i className="fa-regular fa-calendar-check text-amber-600 text-sm"></i>
-                                                <span>موعد التذكير المحدد (اليوم المستهدف)</span>
+                                                <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ± Ø§Ù„Ù…Ø­Ø¯Ø¯ (Ø§Ù„ÙŠÙˆÙ… Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù)</span>
                                             </label>
                                             <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
                                                 {(() => {
@@ -3464,14 +3975,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         {/* Quick Date Chips */}
                                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                            <span className="text-[10.5px] text-slate-500 font-bold ml-1">تحديد سريع:</span>
+                                            <span className="text-[10.5px] text-slate-500 font-bold ml-1">ØªØ­Ø¯ÙŠØ¯ Ø³Ø±ÙŠØ¹:</span>
                                             {[
-                                                { label: 'اليوم', daysToAdd: 0 },
-                                                { label: 'غداً', daysToAdd: 1 },
-                                                { label: 'بعد 3 أيام', daysToAdd: 3 },
-                                                { label: 'بعد أسبوع', daysToAdd: 7 },
-                                                { label: 'بعد أسبوعين', daysToAdd: 14 },
-                                                { label: 'بعد شهر (30 يوم)', daysToAdd: 30 },
+                                                { label: 'Ø§Ù„ÙŠÙˆÙ…', daysToAdd: 0 },
+                                                { label: 'ØºØ¯Ø§Ù‹', daysToAdd: 1 },
+                                                { label: 'Ø¨Ø¹Ø¯ 3 Ø£ÙŠØ§Ù…', daysToAdd: 3 },
+                                                { label: 'Ø¨Ø¹Ø¯ Ø£Ø³Ø¨ÙˆØ¹', daysToAdd: 7 },
+                                                { label: 'Ø¨Ø¹Ø¯ Ø£Ø³Ø¨ÙˆØ¹ÙŠÙ†', daysToAdd: 14 },
+                                                { label: 'Ø¨Ø¹Ø¯ Ø´Ù‡Ø± (30 ÙŠÙˆÙ…)', daysToAdd: 30 },
                                             ].map(chip => {
                                                 const d = new Date();
                                                 d.setDate(d.getDate() + chip.daysToAdd);
@@ -3500,7 +4011,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Email */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                            البريد الإلكتروني (Email)
+                                            Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)
                                         </label>
                                         <div className="relative">
                                             <i className="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3518,7 +4029,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'كلمة المرور 1 (Password)'}
+                                                {currentSheetId === 'account_data' && ((formData.accountCategory || activeAccountCategory) === 'capcut' || (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared')
+                                                    ? 'Password'
+                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 1 (Password)'}
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-lock absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3526,15 +4039,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.password}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder={currentSheetId === 'account_data' ? 'Outlook password' : 'كلمة المرور الرئيسية'}
+                                                    placeholder={currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'capcut'
+                                                        ? 'CapCut password'
+                                                        : currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
+                                                        ? 'ChatGPT password'
+                                                        : currentSheetId === 'account_data' ? 'Outlook password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠØ©'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
                                             </div>
                                         </div>
 
+                                        {!(currentSheetId === 'account_data' && ((formData.accountCategory || activeAccountCategory) === 'capcut' || (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared')) && (
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                {(isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'كلمة المرور 2 (Password 2)'}
+                                                {currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
+                                                    ? 'ChatGPT Password'
+                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 2 (Password 2)'}
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3542,24 +4062,27 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.password2}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, password2: e.target.value }))}
-                                                    placeholder={currentSheetId === 'account_data' ? 'Adobe password' : 'كلمة مرور بديلة / كود إضافي'}
+                                                    placeholder={currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
+                                                        ? 'ChatGPT password'
+                                                        : currentSheetId === 'account_data' ? 'Adobe password' : 'ÙƒÙ„Ù…Ø© Ù…Ø±ÙˆØ± Ø¨Ø¯ÙŠÙ„Ø© / ÙƒÙˆØ¯ Ø¥Ø¶Ø§ÙÙŠ'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
                                             </div>
                                         </div>
+                                        )}
                                     </div>
                                 </>
                             )}
 
                             {/* Duration & Start Date (for Client / Merchant) */}
-                            {isClientOrMerchant && (
+                            {(isClientOrMerchant || currentSheetId === 'account_data') && (
                                 <>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* Duration (Custom Dropdown matching design) */}
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                مدة الاشتراك
+                                                Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
                                             </label>
                                             <span className="text-[11px] text-slate-400">
                                                 (Subscription Duration)
@@ -3585,7 +4108,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {/* Label + Calendar Icon on Right */}
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-xs font-bold ${formData.duration ? 'text-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                        {formData.duration || 'اختر مدة الاشتراك'}
+                                                        {formData.duration || 'Ø§Ø®ØªØ± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'}
                                                     </span>
                                                     <CalendarOptionIcon
                                                         num={formData.duration ? parseInt(formData.duration) : null}
@@ -3610,7 +4133,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
                                                         }`}
                                                     >
-                                                        <span>اختر مدة الاشتراك (من شهر إلى 4 شهور)</span>
+                                                        <span>Ø§Ø®ØªØ± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Ù…Ù† Ø´Ù‡Ø± Ø¥Ù„Ù‰ 4 Ø´Ù‡ÙˆØ±)</span>
                                                         <CalendarOptionIcon num={null} isSelected={!formData.duration} />
                                                     </button>
 
@@ -3641,19 +4164,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         </div>
                                     </div>
 
-                                    {/* Start Date (تاريخ بداية الاشتراك) */}
+                                    {/* Start Date (ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ) */}
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                تاريخ بداية الاشتراك
+                                                ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
                                             </label>
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData(prev => ({ ...prev, startDate: new Date().toISOString().slice(0, 10) }))}
                                                 className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold"
-                                                title="تعيين لتاريخ اليوم"
+                                                title="ØªØ¹ÙŠÙŠÙ† Ù„ØªØ§Ø±ÙŠØ® Ø§Ù„ÙŠÙˆÙ…"
                                             >
-                                                اليوم
+                                                Ø§Ù„ÙŠÙˆÙ…
                                             </button>
                                         </div>
 
@@ -3668,87 +4191,87 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </div>
                                 </div>
 
-                                {/* نوع الاشتراك: شخصي أم مشترك */}
+                                {/* Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ: Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ */}
                                 <div className="space-y-1.5 pt-1">
                                     <div className="flex items-center justify-between">
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                            نوع الاشتراك (شخصي أم مشترك)
+                                            Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ)
                                         </label>
                                         <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
-                                            (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
+                                            (formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
                                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 ring-1 ring-emerald-500/30'
                                                 : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30'
                                         }`}>
-                                            {(formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين') ? '🟢 شخصي — يخصم الجهازين' : '🟣 مشترك — يخصم جهاز واحد'}
+                                            {(formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†') ? 'ðŸŸ¢ Ø´Ø®ØµÙŠ â€” ÙŠØ®ØµÙ… Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ†' : 'ðŸŸ£ Ù…Ø´ØªØ±Ùƒ â€” ÙŠØ®ØµÙ… Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯'}
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2.5">
-                                        {/* شخصي */}
+                                        {/* Ø´Ø®ØµÙŠ */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('شخصي')}
+                                            onClick={() => handleSetDeviceType('Ø´Ø®ØµÙŠ')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
+                                                (formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
                                                 <i className="fa-solid fa-user-shield text-base text-emerald-500"></i>
-                                                <span className="text-sm font-black">شخصي</span>
+                                                <span className="text-sm font-black">Ø´Ø®ØµÙŠ</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">الجهازين للعميل (2 slots)</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù„Ù„Ø¹Ù…ÙŠÙ„ (2 slots)</span>
                                         </button>
 
-                                        {/* مشترك */}
+                                        {/* Ù…Ø´ØªØ±Ùƒ */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('مشترك')}
+                                            onClick={() => handleSetDeviceType('Ù…Ø´ØªØ±Ùƒ')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                (formData.deviceType !== 'شخصي' && formData.deviceType !== 'جهازين')
+                                                (formData.deviceType !== 'Ø´Ø®ØµÙŠ' && formData.deviceType !== 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
                                                     ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-sm ring-2 ring-purple-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
                                                 <i className="fa-solid fa-laptop text-base text-purple-500"></i>
-                                                <span className="text-sm font-black">مشترك</span>
+                                                <span className="text-sm font-black">Ù…Ø´ØªØ±Ùƒ</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">جهاز واحد للعميل (1 slot)</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯ Ù„Ù„Ø¹Ù…ÙŠÙ„ (1 slot)</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* حالة الدفع: مدفوع ولا غير مدفوع */}
+                                {/* Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹: Ù…Ø¯ÙÙˆØ¹ ÙˆÙ„Ø§ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹ */}
                                 <div className="space-y-1.5 pt-1">
                                     <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                        حالة الدفع
+                                        Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹
                                     </label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             type="button"
-                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'مدفوع' }))}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'Ù…Ø¯ÙÙˆØ¹' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.paymentStatus === 'مدفوع' || !formData.paymentStatus
+                                                formData.paymentStatus === 'Ù…Ø¯ÙÙˆØ¹' || !formData.paymentStatus
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <i className="fa-solid fa-circle-check text-base text-emerald-500"></i>
-                                            <span className="text-sm">مدفوع</span>
+                                            <span className="text-sm">Ù…Ø¯ÙÙˆØ¹</span>
                                         </button>
 
                                         <button
                                             type="button"
-                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'غير مدفوع' }))}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.paymentStatus === 'غير مدفوع'
+                                                formData.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹'
                                                     ? 'border-rose-500 bg-rose-500/10 text-rose-600 dark:text-rose-400 shadow-sm ring-2 ring-rose-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <i className="fa-solid fa-circle-xmark text-base text-rose-500"></i>
-                                            <span className="text-sm">غير مدفوع</span>
+                                            <span className="text-sm">ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹</span>
                                         </button>
                                     </div>
                                 </div>
@@ -3758,10 +4281,107 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                             {/* Specifically for Account Data Sheet: Account Creation Date & Reminder Period */}
                             {currentSheetId === 'account_data' && (
+                                <div className="p-3.5 bg-slate-50/80 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
+                                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs">
+                                        <i className="fa-solid fa-layer-group text-sm text-indigo-500"></i>
+                                        <span>Ù†ÙˆØ¹ Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                        {ACCOUNT_CATEGORIES.map(cat => {
+                                            const active = (formData.accountCategory || activeAccountCategory) === cat.id;
+                                            return (
+                                                <button
+                                                    key={cat.id}
+                                                    type="button"
+                                                    onClick={() => setFormData(prev => ({
+                                                        ...prev,
+                                                        accountCategory: cat.id,
+                                                        maxUses: cat.id === 'chatgpt_shared' ? (prev.sharedUsers || 1) : (cat.id === 'capcut' ? 1 : prev.maxUses),
+                                                        capcutMonthlyReminder: cat.id === 'capcut',
+                                                        capcutMonths: cat.id === 'capcut' ? (prev.capcutMonths || 2) : prev.capcutMonths,
+                                                        accountCreatedDate: (cat.id === 'capcut' || cat.id === 'chatgpt_shared') ? (prev.accountCreatedDate || new Date().toISOString().slice(0, 10)) : prev.accountCreatedDate,
+                                                        reminderDays: cat.id === 'chatgpt_shared' ? '30' : prev.reminderDays
+                                                    }))}
+                                                    className={`px-3 py-2.5 rounded-xl border text-xs font-black flex items-center justify-center gap-2 transition ${
+                                                        active
+                                                            ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                                                            : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                                                    }`}
+                                                >
+                                                    <i className={`fa-solid ${cat.icon}`}></i>
+                                                    <span>{cat.label}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {(formData.accountCategory || activeAccountCategory) === 'capcut' && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Subscription months</label>
+                                                <input
+                                                    type="number"
+                                                    min="2"
+                                                    value={formData.capcutMonths || 2}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, capcutMonths: e.target.value }))}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Subscription start date</label>
+                                                <input
+                                                    type="date"
+                                                    value={formData.accountCreatedDate || new Date().toISOString().slice(0, 10)}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, accountCreatedDate: e.target.value }))}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {(formData.accountCategory || activeAccountCategory) === 'chatgpt_shared' && (
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Ø¹Ø¯Ø¯ Ø§Ù„Ø£Ø´Ø®Ø§Øµ Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø³Ø§Ø¨</label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={formData.sharedUsers || 1}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, sharedUsers: e.target.value }))}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Ù…ÙŠØ¹Ø§Ø¯ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯</label>
+                                                <input
+                                                    type="date"
+                                                    value={formData.accountCreatedDate || new Date().toISOString().slice(0, 10)}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, accountCreatedDate: e.target.value, startDate: e.target.value, reminderDays: '30' }))}
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                                                />
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">2FA auth link</label>
+                                                <input
+                                                    type="text"
+                                                    value={formData.twoFaLink || ''}
+                                                    onChange={(e) => setFormData(prev => ({ ...prev, twoFaLink: e.target.value }))}
+                                                    placeholder="https://..."
+                                                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-left"
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Specifically for Account Data Sheet: Account Creation Date & Reminder Period */}
+                            {currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'adobe' && (
                                 <div className="p-3.5 bg-purple-50/60 dark:bg-purple-950/30 rounded-2xl border border-purple-200/70 dark:border-purple-800/50 space-y-3">
                                     <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-bold text-xs">
                                         <i className="fa-solid fa-clock-rotate-left text-sm"></i>
-                                        <span>بيانات التذكير وتاريخ إنشاء الحساب</span>
+                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ°ÙƒÙŠØ± ÙˆØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -3769,14 +4389,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div>
                                             <div className="flex items-center justify-between mb-1.5">
                                                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                                    تاريخ إنشاء الحساب
+                                                    ØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨
                                                 </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => setFormData({ ...formData, accountCreatedDate: new Date().toISOString().slice(0, 10) })}
                                                     className="text-[10px] font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 bg-purple-100/80 dark:bg-purple-900/60 px-2 py-0.5 rounded-md transition"
                                                 >
-                                                    اليوم
+                                                    Ø§Ù„ÙŠÙˆÙ…
                                                 </button>
                                             </div>
                                             <div className="relative">
@@ -3792,7 +4412,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         {/* Reminder Days */}
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                فترة التذكير (عدد الأيام)
+                                                ÙØªØ±Ø© Ø§Ù„ØªØ°ÙƒÙŠØ± (Ø¹Ø¯Ø¯ Ø§Ù„Ø£ÙŠØ§Ù…)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-bell absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3802,7 +4422,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     max="3650"
                                                     value={formData.reminderDays}
                                                     onChange={(e) => setFormData({ ...formData, reminderDays: e.target.value })}
-                                                    placeholder="مثال: 20"
+                                                    placeholder="Ù…Ø«Ø§Ù„: 20"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                                                 />
                                             </div>
@@ -3811,7 +4431,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                     {/* Quick chips for reminder days */}
                                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                        <span className="text-[10.5px] text-slate-400 font-bold ml-1">خيارات سريعة:</span>
+                                        <span className="text-[10.5px] text-slate-400 font-bold ml-1">Ø®ÙŠØ§Ø±Ø§Øª Ø³Ø±ÙŠØ¹Ø©:</span>
                                         {[15, 20, 30, 45, 60].map(days => (
                                             <button
                                                 key={days}
@@ -3823,7 +4443,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-750'
                                                 }`}
                                             >
-                                                {days} يوم
+                                                {days} ÙŠÙˆÙ…
                                             </button>
                                         ))}
                                     </div>
@@ -3836,7 +4456,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <div className="mt-1.5 p-2 rounded-xl bg-purple-100/70 dark:bg-purple-900/40 border border-purple-200/90 dark:border-purple-800/70 flex items-center justify-between text-xs text-purple-950 dark:text-purple-200">
                                                 <div className="flex items-center gap-2">
                                                     <i className="fa-solid fa-calendar-check text-purple-600 dark:text-purple-400"></i>
-                                                    <span>موعد التذكير: <strong>{reminderPreview.targetDate}</strong></span>
+                                                    <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±: <strong>{reminderPreview.targetDate}</strong></span>
                                                 </div>
                                                 <span className="font-bold px-2 py-0.5 rounded-md bg-purple-200/80 dark:bg-purple-800/90 text-[10.5px]">
                                                     {reminderPreview.text}
@@ -3849,11 +4469,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                             {/* Invoice & Visa (for Invoice Sheet & Account Sheet - hidden in main table for Account sheet) */}
                             {!isClientOrMerchant && currentSheetId !== 'reminders_data' && (
+                                currentSheetId !== 'account_data' || (formData.accountCategory || activeAccountCategory) === 'adobe'
+                            ) && (
                                 <div className="space-y-3">
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                كود الفاتورة (Invoice Code)
+                                                ÙƒÙˆØ¯ Ø§Ù„ÙØ§ØªÙˆØ±Ø© (Invoice Code)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3861,7 +4483,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.invoiceNumber}
                                                     onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                                                    placeholder="مثال: INV-100234"
+                                                    placeholder="Ù…Ø«Ø§Ù„: INV-100234"
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -3869,7 +4491,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                الفيزا / رقم البطاقة (Visa)
+                                                Ø§Ù„ÙÙŠØ²Ø§ / Ø±Ù‚Ù… Ø§Ù„Ø¨Ø·Ø§Ù‚Ø© (Visa)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-credit-card absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3905,13 +4527,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             {/* Notes Field (Directly under duration / visa for all sheets) */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    {currentSheetId === 'reminders_data' ? 'تفاصيل وملاحظات التذكير' : 'ملاحظات إضافية'}
+                                    {currentSheetId === 'reminders_data' ? 'ØªÙØ§ØµÙŠÙ„ ÙˆÙ…Ù„Ø§Ø­Ø¸Ø§Øª Ø§Ù„ØªØ°ÙƒÙŠØ±' : 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©'}
                                 </label>
                                 <textarea
                                     rows={currentSheetId === 'reminders_data' ? 3 : 2}
                                     value={formData.notes}
                                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                    placeholder={currentSheetId === 'reminders_data' ? 'اكتب أي تفاصيل، أرقام تواصل، حسابات، أو ملاحظات هامة تخص التذكير...' : 'أي تفاصيل أو ملاحظات إضافية...'}
+                                    placeholder={currentSheetId === 'reminders_data' ? 'Ø§ÙƒØªØ¨ Ø£ÙŠ ØªÙØ§ØµÙŠÙ„ØŒ Ø£Ø±Ù‚Ø§Ù… ØªÙˆØ§ØµÙ„ØŒ Ø­Ø³Ø§Ø¨Ø§ØªØŒ Ø£Ùˆ Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ù‡Ø§Ù…Ø© ØªØ®Øµ Ø§Ù„ØªØ°ÙƒÙŠØ±...' : 'Ø£ÙŠ ØªÙØ§ØµÙŠÙ„ Ø£Ùˆ Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©...'}
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
                                 />
                             </div>
@@ -3926,14 +4548,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-xmark text-slate-400 text-xs"></i>
-                                    <span>إلغاء</span>
+                                    <span>Ø¥Ù„ØºØ§Ø¡</span>
                                 </button>
                                 <button
                                     type="submit"
                                     className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition transform active:scale-95 flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-check text-xs"></i>
-                                    <span>{editingRecord ? 'حفظ التعديلات' : 'إضافة السجل'}</span>
+                                    <span>{editingRecord ? 'Ø­ÙØ¸ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„Ø§Øª' : 'Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„'}</span>
                                 </button>
                             </div>
                         </form>
@@ -3951,8 +4573,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <i className="fa-solid fa-layer-group"></i>
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-lg text-slate-800 dark:text-white">إضافة مجمعة سريعة</h3>
-                                    <p className="text-xs text-slate-400">إضافة عدة أسطر دفعة واحدة إلى <b className="text-indigo-500">{currentSheet.name}</b></p>
+                                    <h3 className="font-black text-lg text-slate-800 dark:text-white">Ø¥Ø¶Ø§ÙØ© Ù…Ø¬Ù…Ø¹Ø© Ø³Ø±ÙŠØ¹Ø©</h3>
+                                    <p className="text-xs text-slate-400">Ø¥Ø¶Ø§ÙØ© Ø¹Ø¯Ø© Ø£Ø³Ø·Ø± Ø¯ÙØ¹Ø© ÙˆØ§Ø­Ø¯Ø© Ø¥Ù„Ù‰ <b className="text-indigo-500">{currentSheet.name}</b></p>
                                 </div>
                             </div>
                             <button
@@ -3964,20 +4586,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </div>
 
                         <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                            <p className="font-bold text-slate-800 dark:text-slate-200">الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):</p>
+                            <p className="font-bold text-slate-800 dark:text-slate-200">Ø§Ù„ØµÙŠØº Ø§Ù„Ù…Ø¯Ø¹ÙˆÙ…Ø© Ù„ÙƒÙ„ Ø³Ø·Ø± (Ù…ÙØµÙˆÙ„Ø© Ø¨Ù€ : Ø£Ùˆ | Ø£Ùˆ Tab):</p>
                             {isClientOrMerchant ? (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass1:pass2:duration:notes
                                     </p>
-                                    <p className="text-[11px] text-slate-400">مثال: user@mail.com:Pass123:PassAlt:1 شهر:عميل مميز</p>
+                                    <p className="text-[11px] text-slate-400">Ù…Ø«Ø§Ù„: user@mail.com:Pass123:PassAlt:1 Ø´Ù‡Ø±:Ø¹Ù…ÙŠÙ„ Ù…Ù…ÙŠØ²</p>
                                 </>
                             ) : (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass:pass2:invoice:visa:visaAccount:notes
                                     </p>
-                                    <p className="text-[11px] text-slate-400">مثال: user@mail.com:Pass123:PassAlt:INV-99:4111222233334444:CIB Bank:عميل مميز</p>
+                                    <p className="text-[11px] text-slate-400">Ù…Ø«Ø§Ù„: user@mail.com:Pass123:PassAlt:INV-99:4111222233334444:CIB Bank:Ø¹Ù…ÙŠÙ„ Ù…Ù…ÙŠØ²</p>
                                 </>
                             )}
                         </div>
@@ -3987,13 +4609,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 rows={8}
                                 value={bulkText}
                                 onChange={(e) => setBulkText(e.target.value)}
-                                placeholder="الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً..."
+                                placeholder="Ø§Ù„ØµÙ‚ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù‡Ù†Ø§ØŒ ÙƒÙ„ Ø³Ø·Ø± ÙŠÙ…Ø«Ù„ Ø³Ø¬Ù„Ø§Ù‹ Ù…Ù†ÙØµÙ„Ø§Ù‹..."
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dir-ltr text-left"
                             />
 
                             <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                                 <span className="text-xs text-slate-400">
-                                    عدد الأسطر: <b className="text-slate-700 dark:text-slate-200">{bulkText.split('\n').filter(l => l.trim()).length}</b>
+                                    Ø¹Ø¯Ø¯ Ø§Ù„Ø£Ø³Ø·Ø±: <b className="text-slate-700 dark:text-slate-200">{bulkText.split('\n').filter(l => l.trim()).length}</b>
                                 </span>
                                 <div className="flex items-center gap-3">
                                     <button
@@ -4001,13 +4623,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         onClick={() => setShowBulkModal(false)}
                                         className="px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition"
                                     >
-                                        إلغاء
+                                        Ø¥Ù„ØºØ§Ø¡
                                     </button>
                                     <button
                                         type="submit"
                                         className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition transform active:scale-95"
                                     >
-                                        إضافة السجلات
+                                        Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„Ø§Øª
                                     </button>
                                 </div>
                             </div>
@@ -4021,7 +4643,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                            <h3 className="font-black text-base text-slate-800 dark:text-white">تعديل اسم الشيت</h3>
+                            <h3 className="font-black text-base text-slate-800 dark:text-white">ØªØ¹Ø¯ÙŠÙ„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª</h3>
                             <button
                                 onClick={() => setShowRenameModal(false)}
                                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition"
@@ -4033,13 +4655,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <form onSubmit={handleRenameSheet} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    اسم الشيت الجديد
+                                    Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø¬Ø¯ÙŠØ¯
                                 </label>
                                 <input
                                     type="text"
                                     value={renameValue}
                                     onChange={(e) => setRenameValue(e.target.value)}
-                                    placeholder="أدخل اسم الشيت"
+                                    placeholder="Ø£Ø¯Ø®Ù„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª"
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                 />
                             </div>
@@ -4050,13 +4672,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     onClick={() => setShowRenameModal(false)}
                                     className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition"
                                 >
-                                    إلغاء
+                                    Ø¥Ù„ØºØ§Ø¡
                                 </button>
                                 <button
                                     type="submit"
                                     className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition"
                                 >
-                                    حفظ الاسم
+                                    Ø­ÙØ¸ Ø§Ù„Ø§Ø³Ù…
                                 </button>
                             </div>
                         </form>
@@ -4067,3 +4689,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         </div>
     );
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
