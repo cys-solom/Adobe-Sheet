@@ -1,4 +1,4 @@
-﻿import { supabase, isConfigured } from '../lib/supabase';
+import { supabase, isConfigured } from '../lib/supabase';
 
 export const SHEETS_CHANGED = 'servicehub:sheets-changed';
 export const SYNC_STATUS = 'servicehub:sync-status';
@@ -7,7 +7,7 @@ const status = (state) => window.dispatchEvent(new CustomEvent(SYNC_STATUS, { de
 export const notifySheets = () => window.dispatchEvent(new Event(SHEETS_CHANGED));
 
 export async function readCloudSheets() {
-    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
     const { data, error } = await supabase.from('custom_sheets_data').select('*');
     if (error) { status('error'); throw error; }
     const result = {};
@@ -20,7 +20,7 @@ export async function readCloudSheets() {
 }
 
 export async function writeCloudSheet(sheetId, records) {
-    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
     status('saving');
     const { error } = await supabase.from('custom_sheets_data').upsert({
         sheet_id: sheetId, records, updated_at: new Date().toISOString()
@@ -37,8 +37,8 @@ const getAccountKey = (value) => String(value || '').trim().toLowerCase();
 const isPersonalSaleRecord = (record) => (
     record.accountUsageMode === 'personal'
     || record.saleType === 'personal'
-    || record.deviceType === 'Ø´Ø®ØµÙŠ'
-    || record.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†'
+    || record.deviceType === 'شخصي'
+    || record.deviceType === 'جهازين'
 );
 
 const getAccountRecordStatus = (uses, maxUses, hasPersonalSale) => {
@@ -189,7 +189,7 @@ export async function markSubscriptionNotRenewed({ sheetId, recordId, newPasswor
     return { record: targetRecord, accounts: recalculatedAccounts };
 }
 export async function syncAccountUsageFromCloudSheets(extraRows = {}) {
-    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
 
     const sheetIds = ['account_data', 'client_data', 'merchant_data'];
     const { data, error } = await supabase
@@ -238,7 +238,7 @@ export async function syncAccountUsageFromCloudSheets(extraRows = {}) {
 }
 
 export async function sellCloudAccount(record, accountId, targetSheetId = 'client_data') {
-    if (!isConfigured) throw new Error('Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ØºÙŠØ± Ù…ØªØµÙ„Ø©');
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
     status('saving');
 
     // 1. Fetch current target sheet and account_data rows

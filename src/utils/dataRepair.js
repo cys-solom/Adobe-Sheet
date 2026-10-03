@@ -1,11 +1,11 @@
-﻿// Helper utilities for sheet data sanitization and date calculations.
+// Helper utilities for sheet data sanitization and date calculations.
 
 export const DEFAULT_SHEETS = [
-    { id: 'client_data', name: 'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„', icon: 'fa-user-tie', color: 'from-blue-600 to-indigo-600', badgeColor: 'bg-blue-500' },
-    { id: 'merchant_data', name: 'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ§Ø¬Ø±', icon: 'fa-store', color: 'from-emerald-600 to-teal-600', badgeColor: 'bg-emerald-500' },
-    { id: 'account_data', name: 'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨', icon: 'fa-shield-halved', color: 'from-purple-600 to-indigo-600', badgeColor: 'bg-purple-500' },
-    { id: 'reminders_data', name: 'ØªØ°ÙƒÙŠØ±Ø§Øª Ø¹Ø§Ù…Ø©', icon: 'fa-bell', color: 'from-amber-500 to-orange-500', badgeColor: 'bg-amber-500' },
-    { id: 'trash_data', name: 'Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª', icon: 'fa-trash-can', color: 'from-rose-600 to-red-600', badgeColor: 'bg-rose-500' }
+    { id: 'client_data', name: 'بيانات العميل', icon: 'fa-user-tie', color: 'from-blue-600 to-indigo-600', badgeColor: 'bg-blue-500' },
+    { id: 'merchant_data', name: 'بيانات التاجر', icon: 'fa-store', color: 'from-emerald-600 to-teal-600', badgeColor: 'bg-emerald-500' },
+    { id: 'account_data', name: 'بيانات الحساب', icon: 'fa-shield-halved', color: 'from-purple-600 to-indigo-600', badgeColor: 'bg-purple-500' },
+    { id: 'reminders_data', name: 'تذكيرات عامة', icon: 'fa-bell', color: 'from-amber-500 to-orange-500', badgeColor: 'bg-amber-500' },
+    { id: 'trash_data', name: 'سلة المهملات', icon: 'fa-trash-can', color: 'from-rose-600 to-red-600', badgeColor: 'bg-rose-500' }
 ];
 
 /**
@@ -16,27 +16,27 @@ export const sanitizeRecord = (r, idx = 0) => {
     if (!r || typeof r !== 'object') return null;
 
     // Handle excel or legacy keys
-    const rawInvoice = r.invoiceNumber ?? r.invoice ?? r['Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø©'] ?? r['Ø§Ù„ÙØ§ØªÙˆØ±Ø©'] ?? '';
-    const rawName = r.name ?? r['Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„'] ?? r['Ø§Ù„Ø¹Ù…ÙŠÙ„'] ?? '';
-    const rawPhone = r.phone ?? r['Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ'] ?? r['Ø§Ù„Ù‡Ø§ØªÙ'] ?? r['Ù…ÙˆØ¨Ø§ÙŠÙ„'] ?? '';
-    const rawContactChannel = r.contactChannel ?? r.contact_channel ?? r['ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„'] ?? r['Ø·Ø±ÙŠÙ‚Ø© Ø§Ù„ØªÙˆØ§ØµÙ„'] ?? '';
-    const rawEmail = r.email ?? r['Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ'] ?? r['Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„'] ?? '';
-    const rawPassword = r.password ?? r.outlookPassword ?? r['Outlook Password'] ?? r['outlook password'] ?? r['Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯'] ?? r['ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ±'] ?? r['Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ Ø§Ù„Ø£ÙˆÙ„'] ?? '';
-    const rawPassword2 = r.password2 ?? r.adobePassword ?? r['Adobe Password'] ?? r['adobe password'] ?? r['Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ Ø§Ù„Ø«Ø§Ù†ÙŠ'] ?? r['ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 2'] ?? r['Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ Ø§Ù„Ø¨Ø¯ÙŠÙ„'] ?? '';
-    const rawDuration = r.duration ?? r['Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'] ?? r['Ø§Ù„Ù…Ø¯Ø©'] ?? '';
-    const rawStartDate = r.startDate ?? r.date ?? r['ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©'] ?? r['ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'] ?? r['ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'] ?? '';
-    const rawDeviceType = r.deviceType ?? r['Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'] ?? r['Ø§Ù„Ø£Ø¬Ù‡Ø²Ø©'] ?? r['Ø§Ù„Ø¬Ù‡Ø§Ø²'] ?? '';
-    const rawPaymentStatus = r.paymentStatus ?? r['Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹'] ?? r['Ø§Ù„Ø¯ÙØ¹'] ?? r.paymentState ?? '';
-    const rawVisa = r.visa ?? r['Ø§Ù„ÙÙŠØ²Ø§'] ?? r['Ø±Ù‚Ù… Ø§Ù„Ø¨Ø·Ø§Ù‚Ø©'] ?? r['Ø§Ù„Ø¨Ø·Ø§Ù‚Ø©'] ?? '';
-    const rawVisaAccount = r.visaAccount ?? r['Ø­Ø³Ø§Ø¨ Ø§Ù„ÙÙŠØ²Ø§'] ?? r['Ø§Ù„Ø¨Ù†Ùƒ'] ?? r['Ø§Ø³Ù… Ø§Ù„Ø¨Ù†Ùƒ'] ?? '';
-    const rawAccountCreatedDate = r.accountCreatedDate ?? r['ØªØ§Ø±ÙŠØ® Ø§Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? r['ØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? r['ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡'] ?? '';
-    const rawReminderDays = r.reminderDays ?? r['ÙØªØ±Ø© Ø§Ù„ØªØ°ÙƒÙŠØ±'] ?? r['ÙØªØ±Ø© ØªØ°ÙƒØ§Ø±ÙŠØ©'] ?? r['Ø§Ù„ØªØ°ÙƒÙŠØ±'] ?? r['Ø§ÙŠØ§Ù… Ø§Ù„ØªØ°ÙƒÙŠØ±'] ?? '';
-    const rawSelectedAccount = r.selectedAccount ?? r['Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? r.accountData ?? r['Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? r['Ø§Ø³Ù… Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? '';
-    const rawCurrentUses = r.currentUses ?? r.current_uses ?? r['Ù…Ø±Ø§Øª Ø§Ù„Ø§Ø³ØªØ®Ø¯Ø§Ù…'] ?? r['Ø¹Ø¯Ø¯ Ù…Ø±Ø§Øª Ø§Ù„Ø¨ÙŠØ¹'] ?? 0;
-    const rawMaxUses = r.maxUses ?? r.allowedUses ?? r.allowed_uses ?? r['Ø§Ù„Ø­Ø¯ Ø§Ù„Ø£Ù‚ØµÙ‰'] ?? r['Ø¹Ø¯Ø¯ Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡'] ?? 2;
-    const rawAccountUsageStatus = r.accountUsageStatus ?? r.account_usage_status ?? r['Ø­Ø§Ù„Ø© Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ø­Ø³Ø§Ø¨'] ?? '';
-    const rawOfferActivated = r.offerActivated ?? r.offer_activated ?? r.offerDone ?? r.offer_done ?? r['ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] ?? false;
-    const rawOfferActivatedAt = r.offerActivatedAt ?? r.offer_activated_at ?? r.offerDoneAt ?? r.offer_done_at ?? r['ØªØ§Ø±ÙŠØ® ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] ?? '';
+    const rawInvoice = r.invoiceNumber ?? r.invoice ?? r['رقم الفاتورة'] ?? r['الفاتورة'] ?? '';
+    const rawName = r.name ?? r['اسم العميل'] ?? r['العميل'] ?? '';
+    const rawPhone = r.phone ?? r['رقم الهاتف'] ?? r['الهاتف'] ?? r['موبايل'] ?? '';
+    const rawContactChannel = r.contactChannel ?? r.contact_channel ?? r['وسيلة التواصل'] ?? r['طريقة التواصل'] ?? '';
+    const rawEmail = r.email ?? r['البريد الإلكتروني'] ?? r['الإيميل'] ?? '';
+    const rawPassword = r.password ?? r.outlookPassword ?? r['Outlook Password'] ?? r['outlook password'] ?? r['الباسورد'] ?? r['كلمة المرور'] ?? r['الباسورد الأول'] ?? '';
+    const rawPassword2 = r.password2 ?? r.adobePassword ?? r['Adobe Password'] ?? r['adobe password'] ?? r['الباسورد الثاني'] ?? r['كلمة المرور 2'] ?? r['الباسورد البديل'] ?? '';
+    const rawDuration = r.duration ?? r['مدة الاشتراك'] ?? r['المدة'] ?? '';
+    const rawStartDate = r.startDate ?? r.date ?? r['تاريخ البداية'] ?? r['تاريخ بداية الاشتراك'] ?? r['تاريخ الاشتراك'] ?? '';
+    const rawDeviceType = r.deviceType ?? r['نوع الاشتراك'] ?? r['الأجهزة'] ?? r['الجهاز'] ?? '';
+    const rawPaymentStatus = r.paymentStatus ?? r['حالة الدفع'] ?? r['الدفع'] ?? r.paymentState ?? '';
+    const rawVisa = r.visa ?? r['الفيزا'] ?? r['رقم البطاقة'] ?? r['البطاقة'] ?? '';
+    const rawVisaAccount = r.visaAccount ?? r['حساب الفيزا'] ?? r['البنك'] ?? r['اسم البنك'] ?? '';
+    const rawAccountCreatedDate = r.accountCreatedDate ?? r['تاريخ انشاء الحساب'] ?? r['تاريخ إنشاء الحساب'] ?? r['تاريخ الإنشاء'] ?? '';
+    const rawReminderDays = r.reminderDays ?? r['فترة التذكير'] ?? r['فترة تذكارية'] ?? r['التذكير'] ?? r['ايام التذكير'] ?? '';
+    const rawSelectedAccount = r.selectedAccount ?? r['بيانات الحساب'] ?? r.accountData ?? r['الحساب'] ?? r['اسم الحساب'] ?? '';
+    const rawCurrentUses = r.currentUses ?? r.current_uses ?? r['مرات الاستخدام'] ?? r['عدد مرات البيع'] ?? 0;
+    const rawMaxUses = r.maxUses ?? r.allowedUses ?? r.allowed_uses ?? r['الحد الأقصى'] ?? r['عدد العملاء'] ?? 2;
+    const rawAccountUsageStatus = r.accountUsageStatus ?? r.account_usage_status ?? r['حالة استخدام الحساب'] ?? '';
+    const rawOfferActivated = r.offerActivated ?? r.offer_activated ?? r.offerDone ?? r.offer_done ?? r['تم تفعيل العرض'] ?? false;
+    const rawOfferActivatedAt = r.offerActivatedAt ?? r.offer_activated_at ?? r.offerDoneAt ?? r.offer_done_at ?? r['تاريخ تفعيل العرض'] ?? '';
     const rawAccountCategory = r.accountCategory ?? r.account_category ?? '';
     const rawCapcutMonthlyReminder = r.capcutMonthlyReminder ?? r.capcut_monthly_reminder ?? false;
     const rawCapcutMonths = r.capcutMonths ?? r.capcut_months ?? '';
@@ -84,13 +84,13 @@ export const sanitizeRecord = (r, idx = 0) => {
         return status;
     })();
 
-    let rawNotes = r.notes ?? r['Ù…Ù„Ø§Ø­Ø¸Ø§Øª'] ?? '';
+    let rawNotes = r.notes ?? r['ملاحظات'] ?? '';
 
     const normalizedAccountCategory = ['adobe', 'capcut', 'chatgpt_shared'].includes(String(rawAccountCategory || '').trim()) ? String(rawAccountCategory).trim() : 'adobe';
     const cleanPassword = String(rawPassword || '').trim();
     const cleanPassword2 = String(rawPassword2 || '').trim();
     const finalPassword = (normalizedAccountCategory === 'capcut' || normalizedAccountCategory === 'chatgpt_shared') && !cleanPassword && cleanPassword2 ? cleanPassword2 : cleanPassword;
-    const finalPassword2 = normalizedAccountCategory === 'adobe' && (!cleanPassword2 || cleanPassword2 === 'Will be added later' || cleanPassword2 === 'Ø³ÙŠØªÙ… Ø¥Ø¶Ø§ÙØªÙ‡ Ù„Ø§Ø­Ù‚Ø§Ù‹')
+    const finalPassword2 = normalizedAccountCategory === 'adobe' && (!cleanPassword2 || cleanPassword2 === 'Will be added later' || cleanPassword2 === 'سيتم إضافته لاحقاً')
         ? 'Service2030@'
         : (normalizedAccountCategory === 'capcut' || normalizedAccountCategory === 'chatgpt_shared') ? '' : cleanPassword2;
 
@@ -105,12 +105,12 @@ export const sanitizeRecord = (r, idx = 0) => {
         duration: String(rawDuration).trim(),
         startDate: String(rawStartDate).trim(),
         deviceType: String(rawDeviceType).trim(),
-        paymentStatus: String(rawPaymentStatus).trim() === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' ? 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' : 'Ù…Ø¯ÙÙˆØ¹',
+        paymentStatus: String(rawPaymentStatus).trim() === 'غير مدفوع' ? 'غير مدفوع' : 'مدفوع',
         selectedAccount: String(rawSelectedAccount || '').trim(),
         currentUses: normalizedAccountCategory === 'capcut' ? 1 : Math.max(0, parseInt(rawCurrentUses, 10) || (normalizedAccountCategory === 'chatgpt_shared' ? parseInt(rawSharedUsers, 10) || 0 : 0)),
         maxUses: normalizedAccountCategory === 'capcut' ? 1 : Math.max(1, parseInt(normalizedAccountCategory === 'chatgpt_shared' ? (rawSharedUsers || rawMaxUses) : rawMaxUses, 10) || 2),
         accountUsageStatus: normalizedAccountCategory === 'capcut' ? 'personal_full' : normalizedAccountUsageStatus,
-        offerActivated: normalizedAccountCategory === 'adobe' && (rawOfferActivated === true || String(rawOfferActivated).trim() === 'true' || String(rawOfferActivated).trim() === 'ØªÙ…'),
+        offerActivated: normalizedAccountCategory === 'adobe' && (rawOfferActivated === true || String(rawOfferActivated).trim() === 'true' || String(rawOfferActivated).trim() === 'تم'),
         offerActivatedAt: normalizedAccountCategory === 'adobe' ? String(rawOfferActivatedAt || '').trim() : '',
         accountCategory: normalizedAccountCategory,
         capcutMode: '',
@@ -148,8 +148,8 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
         return { text: '-', status: 'none', days: null };
     }
 
-    if (duration.includes('Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©') || duration.toLowerCase().includes('lifetime')) {
-        return { text: 'Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©', status: 'lifetime', days: 999999, label: 'âˆž' };
+    if (duration.includes('مدى الحياة') || duration.toLowerCase().includes('lifetime')) {
+        return { text: 'مدى الحياة', status: 'lifetime', days: 999999, label: '∞' };
     }
 
     const effectiveDateStr = rawStartDate || (rawCreatedAt ? String(rawCreatedAt).slice(0, 10) : '');
@@ -176,13 +176,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     const end = new Date(start.getFullYear(), start.getMonth(), start.getDate());
 
-    if (duration.includes('Ø³Ù†Ø©') || duration.includes('Ø³Ù†ÙˆØ§Øª') || duration.toLowerCase().includes('year')) {
+    if (duration.includes('سنة') || duration.includes('سنوات') || duration.toLowerCase().includes('year')) {
         const num = parseInt(duration) || 1;
         end.setFullYear(end.getFullYear() + num);
-    } else if (duration.includes('Ø´Ù‡Ø±') || duration.includes('Ø´Ù‡ÙˆØ±') || duration.toLowerCase().includes('month')) {
+    } else if (duration.includes('شهر') || duration.includes('شهور') || duration.toLowerCase().includes('month')) {
         const num = parseInt(duration) || 1;
         end.setDate(end.getDate() + (num * 30));
-    } else if (duration.includes('ÙŠÙˆÙ…') || duration.toLowerCase().includes('day')) {
+    } else if (duration.includes('يوم') || duration.toLowerCase().includes('day')) {
         const num = parseInt(duration) || 30;
         end.setDate(end.getDate() + num);
     } else {
@@ -210,7 +210,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
     if (diffDays < 0) {
         const absDays = Math.abs(diffDays);
         return {
-            text: absDays === 1 ? 'Ù…Ù†ØªÙ‡ÙŠ Ø£Ù…Ø³' : `Ù…Ù†ØªÙ‡ÙŠ (Ù…Ù†Ø° ${absDays} ÙŠÙˆÙ…)`,
+            text: absDays === 1 ? 'منتهي أمس' : `منتهي (منذ ${absDays} يوم)`,
             status: 'expired',
             days: diffDays,
             endDate: endFormatted,
@@ -220,7 +220,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 0) {
         return {
-            text: 'ÙŠÙ†ØªÙ‡ÙŠ Ø§Ù„ÙŠÙˆÙ…',
+            text: 'ينتهي اليوم',
             status: 'expiring-today',
             days: 0,
             endDate: endFormatted,
@@ -230,7 +230,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 1) {
         return {
-            text: 'Ù…ØªØ¨Ù‚ÙŠ ÙŠÙˆÙ… ÙˆØ§Ø­Ø¯',
+            text: 'متبقي يوم واحد',
             status: 'urgent',
             days: 1,
             endDate: endFormatted,
@@ -240,7 +240,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays < 30) {
         return {
-            text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} ÙŠÙˆÙ…`,
+            text: `متبقي ${diffDays} يوم`,
             status: diffDays <= 3 ? 'urgent' : (diffDays <= 7 ? 'warning' : 'active'),
             days: diffDays,
             endDate: endFormatted,
@@ -253,13 +253,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     let text = '';
     if (months === 1) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±';
+        text = remDays > 0 ? `متبقي شهر و ${remDays} يوم` : 'متبقي شهر';
     } else if (months === 2) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ† Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ†';
+        text = remDays > 0 ? `متبقي شهرين و ${remDays} يوم` : 'متبقي شهرين';
     } else if (months >= 3 && months <= 10) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ±`;
+        text = remDays > 0 ? `متبقي ${months} شهور و ${remDays} يوم` : `متبقي ${months} شهور`;
     } else {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø±`;
+        text = remDays > 0 ? `متبقي ${months} شهر و ${remDays} يوم` : `متبقي ${months} شهر`;
     }
 
     return {
@@ -283,7 +283,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
     }
 
     if (isNaN(reminderDays) || reminderDays <= 0) {
-        return { text: 'Ø¨Ø¯ÙˆÙ† ØªØ°ÙƒÙŠØ±', status: 'none', days: null, targetDate: '', createdDate: effectiveDateStr };
+        return { text: 'بدون تذكير', status: 'none', days: null, targetDate: '', createdDate: effectiveDateStr };
     }
 
     const parseDateParts = (str) => {
@@ -325,7 +325,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
     if (diffDays < 0) {
         const absDays = Math.abs(diffDays);
         return {
-            text: absDays === 1 ? 'Ù…Ø³ØªØ­Ù‚ Ù…Ù†Ø° Ø£Ù…Ø³' : `Ù…Ø³ØªØ­Ù‚ (ØªØ¬Ø§ÙˆØ² ${absDays} ÙŠÙˆÙ…)`,
+            text: absDays === 1 ? 'مستحق منذ أمس' : `مستحق (تجاوز ${absDays} يوم)`,
             status: 'expired',
             days: diffDays,
             targetDate: targetFormatted,
@@ -336,7 +336,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
 
     if (diffDays === 0) {
         return {
-            text: 'Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ± Ø§Ù„ÙŠÙˆÙ…',
+            text: 'موعد التذكير اليوم',
             status: 'expiring-today',
             days: 0,
             targetDate: targetFormatted,
@@ -347,7 +347,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
 
     if (diffDays === 1) {
         return {
-            text: 'Ù…ØªØ¨Ù‚ÙŠ ÙŠÙˆÙ… ÙˆØ§Ø­Ø¯ Ù„Ù„ØªØ°ÙƒÙŠØ±',
+            text: 'متبقي يوم واحد للتذكير',
             status: 'urgent',
             days: 1,
             targetDate: targetFormatted,
@@ -358,7 +358,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
 
     if (diffDays <= 3) {
         return {
-            text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} Ø£ÙŠØ§Ù… Ù„Ù„ØªØ°ÙƒÙŠØ±`,
+            text: `متبقي ${diffDays} أيام للتذكير`,
             status: 'urgent',
             days: diffDays,
             targetDate: targetFormatted,
@@ -369,7 +369,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
 
     if (diffDays <= 7) {
         return {
-            text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} Ø£ÙŠØ§Ù… Ù„Ù„ØªØ°ÙƒÙŠØ±`,
+            text: `متبقي ${diffDays} أيام للتذكير`,
             status: 'warning',
             days: diffDays,
             targetDate: targetFormatted,
@@ -379,7 +379,7 @@ export const calculateAccountReminder = (rawCreatedDate, rawReminderDays, rawCre
     }
 
     return {
-        text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} ÙŠÙˆÙ… Ù„Ù„ØªØ°ÙƒÙŠØ±`,
+        text: `متبقي ${diffDays} يوم للتذكير`,
         status: 'active',
         days: diffDays,
         targetDate: targetFormatted,

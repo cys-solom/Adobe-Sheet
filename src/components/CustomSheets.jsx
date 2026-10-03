@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
@@ -51,12 +51,12 @@ const CalendarOptionIcon = ({ num = null, isSelected = false }) => {
 };
 
 const DURATION_ITEMS = [
-    { label: '1 Ø´Ù‡Ø± (30 ÙŠÙˆÙ…)', value: '1 Ø´Ù‡Ø±', num: 1 },
-    { label: '2 Ø´Ù‡Ø± (60 ÙŠÙˆÙ…)', value: '2 Ø´Ù‡Ø±', num: 2 },
-    { label: '3 Ø´Ù‡ÙˆØ± (90 ÙŠÙˆÙ…)', value: '3 Ø´Ù‡ÙˆØ±', num: 3 },
-    { label: '4 Ø´Ù‡ÙˆØ± (120 ÙŠÙˆÙ…)', value: '4 Ø´Ù‡ÙˆØ±', num: 4 },
-    { label: '6 Ø´Ù‡ÙˆØ± (180 ÙŠÙˆÙ…)', value: '6 Ø´Ù‡ÙˆØ±', num: 6 },
-    { label: '1 Ø³Ù†Ø© (365 ÙŠÙˆÙ…)', value: '1 Ø³Ù†Ø©', num: 12 },
+    { label: '1 شهر (30 يوم)', value: '1 شهر', num: 1 },
+    { label: '2 شهر (60 يوم)', value: '2 شهر', num: 2 },
+    { label: '3 شهور (90 يوم)', value: '3 شهور', num: 3 },
+    { label: '4 شهور (120 يوم)', value: '4 شهور', num: 4 },
+    { label: '6 شهور (180 يوم)', value: '6 شهور', num: 6 },
+    { label: '1 سنة (365 يوم)', value: '1 سنة', num: 12 },
 ];
 
 const ACCOUNT_CATEGORIES = [
@@ -161,8 +161,8 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
         return { text: '-', status: 'none', days: null };
     }
 
-    if (duration.includes('Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©') || duration.toLowerCase().includes('lifetime')) {
-        return { text: 'Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©', status: 'lifetime', days: 999999, label: 'âˆž' };
+    if (duration.includes('مدى الحياة') || duration.toLowerCase().includes('lifetime')) {
+        return { text: 'مدى الحياة', status: 'lifetime', days: 999999, label: '∞' };
     }
 
     const effectiveDateStr = rawStartDate || (rawCreatedAt ? String(rawCreatedAt).slice(0, 10) : '');
@@ -189,13 +189,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     const end = new Date(start.getFullYear(), start.getMonth(), start.getDate());
 
-    if (duration.includes('Ø³Ù†Ø©') || duration.includes('Ø³Ù†ÙˆØ§Øª') || duration.toLowerCase().includes('year')) {
+    if (duration.includes('سنة') || duration.includes('سنوات') || duration.toLowerCase().includes('year')) {
         const num = parseInt(duration) || 1;
         end.setFullYear(end.getFullYear() + num);
-    } else if (duration.includes('Ø´Ù‡Ø±') || duration.includes('Ø´Ù‡ÙˆØ±') || duration.toLowerCase().includes('month')) {
+    } else if (duration.includes('شهر') || duration.includes('شهور') || duration.toLowerCase().includes('month')) {
         const num = parseInt(duration) || 1;
         end.setDate(end.getDate() + (num * 30));
-    } else if (duration.includes('ÙŠÙˆÙ…') || duration.toLowerCase().includes('day')) {
+    } else if (duration.includes('يوم') || duration.toLowerCase().includes('day')) {
         const num = parseInt(duration) || 30;
         end.setDate(end.getDate() + num);
     } else {
@@ -223,7 +223,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
     if (diffDays < 0) {
         const absDays = Math.abs(diffDays);
         return {
-            text: absDays === 1 ? 'Ù…Ù†ØªÙ‡ÙŠ Ø£Ù…Ø³' : `Ù…Ù†ØªÙ‡ÙŠ (Ù…Ù†Ø° ${absDays} ÙŠÙˆÙ…)`,
+            text: absDays === 1 ? 'منتهي أمس' : `منتهي (منذ ${absDays} يوم)`,
             status: 'expired',
             days: diffDays,
             endDate: endFormatted,
@@ -233,7 +233,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 0) {
         return {
-            text: 'ÙŠÙ†ØªÙ‡ÙŠ Ø§Ù„ÙŠÙˆÙ…',
+            text: 'ينتهي اليوم',
             status: 'expiring-today',
             days: 0,
             endDate: endFormatted,
@@ -243,7 +243,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays === 1) {
         return {
-            text: 'Ù…ØªØ¨Ù‚ÙŠ ÙŠÙˆÙ… ÙˆØ§Ø­Ø¯',
+            text: 'متبقي يوم واحد',
             status: 'urgent',
             days: 1,
             endDate: endFormatted,
@@ -253,7 +253,7 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     if (diffDays < 30) {
         return {
-            text: `Ù…ØªØ¨Ù‚ÙŠ ${diffDays} ÙŠÙˆÙ…`,
+            text: `متبقي ${diffDays} يوم`,
             status: diffDays <= 3 ? 'urgent' : (diffDays <= 7 ? 'warning' : 'active'),
             days: diffDays,
             endDate: endFormatted,
@@ -266,13 +266,13 @@ export const calculateRemainingTime = (rawStartDate, rawDuration, rawCreatedAt) 
 
     let text = '';
     if (months === 1) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±';
+        text = remDays > 0 ? `متبقي شهر و ${remDays} يوم` : 'متبقي شهر';
     } else if (months === 2) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ† Ùˆ ${remDays} ÙŠÙˆÙ…` : 'Ù…ØªØ¨Ù‚ÙŠ Ø´Ù‡Ø±ÙŠÙ†';
+        text = remDays > 0 ? `متبقي شهرين و ${remDays} يوم` : 'متبقي شهرين';
     } else if (months >= 3 && months <= 10) {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡ÙˆØ±`;
+        text = remDays > 0 ? `متبقي ${months} شهور و ${remDays} يوم` : `متبقي ${months} شهور`;
     } else {
-        text = remDays > 0 ? `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø± Ùˆ ${remDays} ÙŠÙˆÙ…` : `Ù…ØªØ¨Ù‚ÙŠ ${months} Ø´Ù‡Ø±`;
+        text = remDays > 0 ? `متبقي ${months} شهر و ${remDays} يوم` : `متبقي ${months} شهر`;
     }
 
     return {
@@ -325,7 +325,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [offerReminderFilter, setOfferReminderFilter] = useState('all'); // account_data only: all, pending, near3, today, overdue
     const [isAlertsExpanded, setIsAlertsExpanded] = useState(true);
     const [paymentFilter, setPaymentFilter] = useState('all'); // advanced: all, paid, unpaid
-    const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, Ø¬Ù‡Ø§Ø², Ø¬Ù‡Ø§Ø²ÙŠÙ†
+    const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, جهاز, جهازين
     const [renewalFilter, setRenewalFilter] = useState('all');
     const [accountStockFilter, setAccountStockFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
@@ -354,14 +354,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
-        contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
+        contactChannel: 'واتساب',
         email: '',
         password: '',
         password2: '',
         duration: '',
         startDate: '',
-        deviceType: 'Ù…Ø´ØªØ±Ùƒ',
-        paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
+        deviceType: 'مشترك',
+        paymentStatus: 'مدفوع',
         selectedAccount: '',
         invoiceNumber: '',
         visa: '',
@@ -504,7 +504,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             return true;
         } catch (e) {
             console.error('Error saving data:', e);
-            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª', 'error');
+            showToast('حدث خطأ أثناء حفظ البيانات', 'error');
             return false;
         }
     };
@@ -611,9 +611,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     const handleSetDeviceType = (type) => {
-        const nextType = type === 'Ø´Ø®ØµÙŠ' ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ';
+        const nextType = type === 'شخصي' ? 'شخصي' : 'مشترك';
         setFormData(prev => {
-            if (nextType === 'Ø´Ø®ØµÙŠ' && prev.selectedAccount) {
+            if (nextType === 'شخصي' && prev.selectedAccount) {
                 const account = availableAccounts.find(acc => {
                     const selectedValue = String(prev.selectedAccount || '').toLowerCase();
                     return String(acc.email || '').toLowerCase() === selectedValue
@@ -622,8 +622,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const maxUses = Math.max(1, Number(account?.maxUses || 2));
                 const currentUses = Math.max(0, Number(account?.currentUses || 0));
                 if (account && (currentUses > 0 || maxUses < 2)) {
-                    showToast('ØªÙ… Ø¥Ù„ØºØ§Ø¡ Ø§Ø®ØªÙŠØ§Ø± Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„Ø£Ù† Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ ÙŠØªØ·Ù„Ø¨ Ø­Ø³Ø§Ø¨Ø§Ù‹ Ù…ØªØ§Ø­Ø§Ù‹ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ (Ø¬Ù‡Ø§Ø²ÙŠÙ†)', 'warning');
-                    return { ...prev, deviceType: 'Ø´Ø®ØµÙŠ', selectedAccount: '' };
+                    showToast('تم إلغاء اختيار الحساب لأن الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (جهازين)', 'warning');
+                    return { ...prev, deviceType: 'شخصي', selectedAccount: '' };
                 }
             }
             return { ...prev, deviceType: nextType };
@@ -643,18 +643,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     // Copy helper with feedback
     const handleCopy = (text, key) => {
         if (!text) {
-            showToast('Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª Ù„Ù„Ù†Ø³Ø®', 'warning');
+            showToast('لا توجد بيانات للنسخ', 'warning');
             return;
         }
         navigator.clipboard.writeText(text);
         setCopiedField(key);
-        showToast('ØªÙ… Ø§Ù„Ù†Ø³Ø® Ø¥Ù„Ù‰ Ø§Ù„Ø­Ø§ÙØ¸Ø© Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        showToast('تم النسخ إلى الحافظة بنجاح ✓', 'success');
         setTimeout(() => setCopiedField(null), 1500);
     };
 
     const handleCopyAdobeAccess = (rec) => {
         if (!rec?.email) {
-            showToast('ÙŠØ¬Ø¨ ÙˆØ¬ÙˆØ¯ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù„Ù„Ù†Ø³Ø®', 'warning');
+            showToast('يجب وجود الإيميل للنسخ', 'warning');
             return;
         }
 
@@ -697,7 +697,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     const handleCopyChatGPTAccess = (rec) => {
         if (!rec?.email) {
-            showToast('ÙŠØ¬Ø¨ ÙˆØ¬ÙˆØ¯ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ù„Ù„Ù†Ø³Ø®', 'warning');
+            showToast('يجب وجود الإيميل للنسخ', 'warning');
             return;
         }
 
@@ -723,41 +723,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (isClientOrMerchant) {
             if (!editingRecord && currentSheetId === 'client_data' && accountEntryMode === 'available' && !findSelectedAvailableAccount()) {
-                showToast('ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ù…ÙŠÙ„ Ù…ØªØ§Ø­ Ù…Ù† Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨', 'warning');
+                showToast('يرجى اختيار ميل متاح من بيانات الحساب', 'warning');
                 return;
             }
             if (!formData.email.trim()) {
-                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ', 'warning');
+                showToast('يرجى إدخال البريد الإلكتروني', 'warning');
                 return;
             }
             if (!formData.duration) {
-                showToast('ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ', 'warning');
+                showToast('يرجى اختيار مدة الاشتراك', 'warning');
                 return;
             }
             const selected = findSelectedAvailableAccount();
-            const isPersonalChosen = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+            const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
             if (!editingRecord && accountEntryMode === 'available' && selected && isPersonalChosen && Number(selected.currentUses) > 0) {
-                showToast('Ø§Ù„Ø­Ø³Ø§Ø¨ Ø§Ù„Ù…Ø®ØªØ§Ø± Ù…Ø³ØªØ®Ø¯Ù… Ù…Ù†Ù‡ Ø¬Ù‡Ø§Ø² Ø¨Ø§Ù„ÙØ¹Ù„ØŒ Ù„Ø§ ÙŠÙ…ÙƒÙ† Ø¨ÙŠØ¹Ù‡ ÙƒØ§Ø´ØªØ±Ø§Ùƒ Ø´Ø®ØµÙŠ (Ø¬Ù‡Ø§Ø²ÙŠÙ†). ÙŠØ±Ø¬Ù‰ Ø§Ø®ØªÙŠØ§Ø± Ø­Ø³Ø§Ø¨ Ù…ØªØ§Ø­ ÙƒØ§Ù…Ù„ Ø£Ùˆ ØªØºÙŠÙŠØ± Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø¥Ù„Ù‰ Ù…Ø´ØªØ±Ùƒ.', 'warning');
+                showToast('الحساب المختار مستخدم منه جهاز بالفعل، لا يمكن بيعه كاشتراك شخصي (جهازين). يرجى اختيار حساب متاح كامل أو تغيير الاشتراك إلى مشترك.', 'warning');
                 return;
             }
         } else if (currentSheetId === 'account_data') {
             if (!formData.email && !formData.password && !formData.password2) {
-                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ø£Ùˆ ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„', 'warning');
+                showToast('يرجى إدخال البريد الإلكتروني أو كلمة المرور على الأقل', 'warning');
                 return;
             }
         } else if (currentSheetId === 'reminders_data') {
             if (!formData.email && !formData.notes) {
-                showToast('ÙŠØ±Ø¬Ù‰ ÙƒØªØ§Ø¨Ø© Ø¹Ù†ÙˆØ§Ù† Ø£Ùˆ ØªÙØ§ØµÙŠÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±', 'warning');
+                showToast('يرجى كتابة عنوان أو تفاصيل التذكير', 'warning');
                 return;
             }
         } else {
             if (!formData.email && !formData.invoiceNumber && !formData.visa && !formData.selectedAccount) {
-                showToast('ÙŠØ±Ø¬Ù‰ Ø¥Ø¯Ø®Ø§Ù„ Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ Ø£Ùˆ Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø© Ø£Ùˆ Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ Ø¹Ù„Ù‰ Ø§Ù„Ø£Ù‚Ù„', 'warning');
+                showToast('يرجى إدخال البريد الإلكتروني أو رقم الفاتورة أو بيانات الحساب على الأقل', 'warning');
                 return;
             }
         }
 
-        const isPersonalSelection = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+        const isPersonalSelection = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
         const accountCategory = formData.accountCategory || activeAccountCategory || 'adobe';
         const sharedUsers = Math.max(1, Number(formData.sharedUsers || 1));
         const capcutMonths = Math.max(1, Number(formData.capcutMonths || 2));
@@ -765,16 +765,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const cleanPayload = isClientOrMerchant ? {
             name: formData.name || '',
             phone: formData.phone || '',
-            contactChannel: formData.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨',
+            contactChannel: formData.contactChannel || 'واتساب',
             email: formData.email,
             password: formData.password,
             password2: formData.password2 || 'Service2030@',
             duration: formData.duration,
             startDate: formData.startDate || '',
-            deviceType: isPersonalSelection ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ',
+            deviceType: isPersonalSelection ? 'شخصي' : 'مشترك',
             accountUsageMode: isPersonalSelection ? 'personal' : 'shared_one_device',
             saleType: isPersonalSelection ? 'personal' : 'shared_one_device',
-            paymentStatus: formData.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
+            paymentStatus: formData.paymentStatus || 'مدفوع',
             selectedAccount: formData.selectedAccount || '',
             notes: formData.notes,
             invoiceNumber: '',
@@ -811,15 +811,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             renewalDate: '',
             twoFaLink: accountCategory === 'chatgpt_shared' ? (formData.twoFaLink || '') : ''
         } : currentSheetId === 'reminders_data' ? {
-            email: formData.email || 'ØªØ°ÙƒÙŠØ± Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†',
-            password: formData.password || 'Ù…ØªÙˆØ³Ø·',
+            email: formData.email || 'تذكير بدون عنوان',
+            password: formData.password || 'متوسط',
             password2: 'Service2030@',
             invoiceNumber: '',
             visa: '',
             visaAccount: '',
             duration: '',
             startDate: formData.accountCreatedDate || formData.startDate || new Date().toISOString().slice(0, 10),
-            deviceType: formData.deviceType || 'ØªØ°ÙƒÙŠØ± Ø¹Ø§Ù…',
+            deviceType: formData.deviceType || 'تذكير عام',
             paymentStatus: '',
             selectedAccount: '',
             notes: formData.notes || '',
@@ -862,7 +862,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return item;
             });
             if (!await saveRecords(updated)) return;
-            showToast('ØªÙ… ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+            showToast('تم تعديل البيانات بنجاح ✓', 'success');
         } else {
             // Add new
             const newRecord = {
@@ -875,7 +875,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const selectedAcc = findSelectedAvailableAccount();
                 await sellCloudAccount(newRecord, selectedAcc?.id, currentSheetId);
             } else if (!await saveRecords([newRecord, ...records])) return;
-            showToast('ØªÙ… Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„ Ø§Ù„Ø¬Ø¯ÙŠØ¯ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+            showToast('تم إضافة السجل الجديد بنجاح ✓', 'success');
         }
 
         setShowAddModal(false);
@@ -884,14 +884,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setFormData({
             name: '',
             phone: '',
-            contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
+            contactChannel: 'واتساب',
             email: '',
             password: '',
             password2: '',
             duration: '',
             startDate: '',
-            deviceType: 'Ù…Ø´ØªØ±Ùƒ',
-            paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
+            deviceType: 'مشترك',
+            paymentStatus: 'مدفوع',
             selectedAccount: '',
             invoiceNumber: '',
             visa: '',
@@ -912,7 +912,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         });
         } catch (err) {
             console.error('Error saving record/sale:', err);
-            showToast('ØªØ¹Ø°Ø± Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ¹: ' + (err?.message || 'ØªØ£ÙƒØ¯ Ù…Ù† Ø§ØªØµØ§Ù„ Ù‚Ø§Ø¹Ø¯Ø© Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª ÙˆØªÙˆÙØ± Ø§Ù„Ø­Ø³Ø§Ø¨'), 'error');
+            showToast('تعذر حفظ البيع: ' + (err?.message || 'تأكد من اتصال قاعدة البيانات وتوفر الحساب'), 'error');
         } finally { setIsSaving(false); }
     };
 
@@ -924,14 +924,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setFormData({
             name: rec.name || '',
             phone: rec.phone || '',
-            contactChannel: rec.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨',
+            contactChannel: rec.contactChannel || 'واتساب',
             email: rec.email || '',
             password: getAccountCategory(rec) === 'chatgpt_shared' ? (rec.password || rec.password2 || '') : (rec.password || ''),
             password2: getAccountCategory(rec) === 'chatgpt_shared' ? '' : (rec.password2 || ''),
             duration: rec.duration || '',
             startDate: rec.startDate || rec.date || '',
-            deviceType: (rec.deviceType === 'Ø´Ø®ØµÙŠ' || rec.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†') ? 'Ø´Ø®ØµÙŠ' : 'Ù…Ø´ØªØ±Ùƒ',
-            paymentStatus: rec.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
+            deviceType: (rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين') ? 'شخصي' : 'مشترك',
+            paymentStatus: rec.paymentStatus || 'مدفوع',
             selectedAccount: rec.selectedAccount || '',
             invoiceNumber: rec.invoiceNumber || '',
             visa: rec.visa || '',
@@ -978,10 +978,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const handleDeleteRecord = async (id) => {
         if (isTrashSheet) {
             const confirmed = await showConfirm({
-                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹',
-                message: 'Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø­Ø°Ù Ù‡Ø°Ø§ Ø§Ù„Ø³Ø¬Ù„ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ØŸ Ù„Ù† ÙŠÙ…ÙƒÙ†Ùƒ Ø§Ø³ØªØ¹Ø§Ø¯ØªÙ‡ Ù…Ø±Ø© Ø£Ø®Ø±Ù‰.',
-                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
-                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
+                title: 'حذف السجل نهائياً',
+                message: 'هل أنت متأكد من حذف هذا السجل نهائياً؟ لن يمكنك استعادته مرة أخرى.',
+                confirmText: 'نعم، احذف',
+                cancelText: 'إلغاء',
                 type: 'danger'
             });
             if (!confirmed) return;
@@ -991,27 +991,27 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const newSelected = new Set(selectedIds);
             newSelected.delete(id);
             setSelectedIds(newSelected);
-            showToast('ØªÙ… Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù„Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­', 'info');
+            showToast('تم الحذف النهائي للسجل بنجاح', 'info');
         } else {
             const confirmed = await showConfirm({
-                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„',
-                message: 'Ù‡Ù„ ØªØ±ÙŠØ¯ Ø­Ø°Ù Ù‡Ø°Ø§ Ø§Ù„Ø³Ø¬Ù„ ÙˆÙ†Ù‚Ù„Ù‡ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§ØªØŸ',
-                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
-                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
+                title: 'حذف السجل',
+                message: 'هل تريد حذف هذا السجل ونقله إلى سلة المهملات؟',
+                confirmText: 'نعم، احذف',
+                cancelText: 'إلغاء',
                 type: 'danger'
             });
             if (!confirmed) return;
 
             const targetRecord = records.find(r => r.id === id);
             if (targetRecord) {
-                await moveToTrash([targetRecord], currentSheetId, currentSheet?.name || 'Ø´ÙŠØª');
+                await moveToTrash([targetRecord], currentSheetId, currentSheet?.name || 'شيت');
             }
             const updated = records.filter(r => r.id !== id);
             await saveRecords(updated);
             const newSelected = new Set(selectedIds);
             newSelected.delete(id);
             setSelectedIds(newSelected);
-            showToast('ØªÙ… Ù†Ù‚Ù„ Ø§Ù„Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+            showToast('تم نقل السجل إلى سلة المهملات بنجاح ✓', 'success');
         }
     };
 
@@ -1039,11 +1039,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             newSelected.delete(recordToRestore.id);
             setSelectedIds(newSelected);
 
-            const destName = recordToRestore.originSheetName || sheetsList.find(s => s.id === targetSheetId)?.name || 'Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ';
-            showToast(`ØªÙ… Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ Ø¥Ù„Ù‰ "${destName}" âœ“`, 'success');
+            const destName = recordToRestore.originSheetName || sheetsList.find(s => s.id === targetSheetId)?.name || 'الشيت الأصلي';
+            showToast(`تم استرداد السجل بنجاح إلى "${destName}" ✓`, 'success');
         } catch (err) {
             console.error('Error restoring record:', err);
-            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„', 'error');
+            showToast('حدث خطأ أثناء استرداد السجل', 'error');
         }
     };
 
@@ -1076,10 +1076,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const updatedTrash = records.filter(r => !selectedIds.has(r.id));
             await saveRecords(updatedTrash);
             setSelectedIds(new Set());
-            showToast(`ØªÙ… Ø§Ø³ØªØ±Ø¯Ø§Ø¯ ${selectedRecords.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ Ø¥Ù„Ù‰ Ø´ÙŠØªØ§ØªÙ‡Ø§ Ø§Ù„Ø£ØµÙ„ÙŠØ© âœ“`, 'success');
+            showToast(`تم استرداد ${selectedRecords.length} سجل بنجاح إلى شيتاتها الأصلية ✓`, 'success');
         } catch (err) {
             console.error('Error in bulk restore:', err);
-            showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„Ø§Øª', 'error');
+            showToast('حدث خطأ أثناء استرداد السجلات', 'error');
         }
     };
 
@@ -1087,30 +1087,30 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const handleEmptyTrash = async () => {
         if (records.length === 0) return;
         const confirmed = await showConfirm({
-            title: 'Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
-            message: 'ØªØ­Ø°ÙŠØ±: Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø±ØºØ¨ØªÙƒ ÙÙŠ Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ØŸ Ø³ÙŠØªÙ… Ø­Ø°Ù Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹ ÙˆÙ„Ø§ ÙŠÙ…ÙƒÙ† Ø§Ù„ØªØ±Ø§Ø¬Ø¹.',
-            confirmText: 'Ù†Ø¹Ù…ØŒ Ø¥ÙØ±Ø§Øº Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
-            cancelText: 'Ø¥Ù„ØºØ§Ø¡',
+            title: 'إفراغ سلة المهملات',
+            message: 'تحذير: هل أنت متأكد من رغبتك في إفراغ سلة المهملات بالكامل؟ سيتم حذف جميع السجلات نهائياً ولا يمكن التراجع.',
+            confirmText: 'نعم، إفراغ المهملات',
+            cancelText: 'إلغاء',
             type: 'danger'
         });
         if (!confirmed) return;
 
         saveRecords([]);
         setSelectedIds(new Set());
-        showToast('ØªÙ… Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ø¨Ù†Ø¬Ø§Ø­', 'info');
+        showToast('تم إفراغ سلة المهملات بالكامل بنجاح', 'info');
     };
 
     // Quick toggle payment status directly from table
     const handleTogglePaymentStatus = (id) => {
         const updated = records.map(r => {
             if (r.id === id) {
-                const nextStatus = r.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' ? 'Ù…Ø¯ÙÙˆØ¹' : 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹';
+                const nextStatus = r.paymentStatus === 'غير مدفوع' ? 'مدفوع' : 'غير مدفوع';
                 return { ...r, paymentStatus: nextStatus, updated_at: new Date().toISOString() };
             }
             return r;
         });
         saveRecords(updated);
-        showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        showToast('تم تحديث حالة الدفع بنجاح ✓', 'success');
     };
 
     const handleSetAccountUsage = async (id, uses, accountUsageStatus = '') => {
@@ -1126,7 +1126,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 updated_at: new Date().toISOString()
             };
         });
-        if (await saveRecords(updated)) showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© Ø¨ÙŠØ¹ Ø§Ù„Ø­Ø³Ø§Ø¨ Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        if (await saveRecords(updated)) showToast('تم تحديث حالة بيع الحساب بنجاح ✓', 'success');
     };
 
     const handleSetChatGPTUsers = async (id, users) => {
@@ -1174,7 +1174,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 updated_at: new Date().toISOString()
             };
         });
-        if (await saveRecords(updated)) showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø­Ø§Ù„Ø© ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶ âœ“', 'success');
+        if (await saveRecords(updated)) showToast('تم تحديث حالة تفعيل العرض ✓', 'success');
     };
 
     // Delete Selected Records (Bulk soft-delete or permanent delete)
@@ -1182,10 +1182,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         if (selectedIds.size === 0) return;
         if (isTrashSheet) {
             const confirmed = await showConfirm({
-                title: 'Ø­Ø°Ù Ø§Ù„Ø³Ø¬Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹',
-                message: `Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù€ ${selectedIds.size} Ø³Ø¬Ù„ Ù…Ø­Ø¯Ø¯ØŸ Ù„Ù† ÙŠÙ…ÙƒÙ† Ø§Ø³ØªØ¹Ø§Ø¯ØªÙ‡Ø§.`,
-                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
-                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
+                title: 'حذف السجلات نهائياً',
+                message: `هل أنت متأكد من الحذف النهائي لـ ${selectedIds.size} سجل محدد؟ لن يمكن استعادتها.`,
+                confirmText: 'نعم، احذف',
+                cancelText: 'إلغاء',
                 type: 'danger'
             });
             if (!confirmed) return;
@@ -1193,23 +1193,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const updated = records.filter(r => !selectedIds.has(r.id));
             saveRecords(updated);
             setSelectedIds(new Set());
-            showToast(`ØªÙ… Ø§Ù„Ø­Ø°Ù Ø§Ù„Ù†Ù‡Ø§Ø¦ÙŠ Ù„Ù€ ${selectedIds.size} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­`, 'info');
+            showToast(`تم الحذف النهائي لـ ${selectedIds.size} سجل بنجاح`, 'info');
         } else {
             const confirmed = await showConfirm({
-                title: 'Ù†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª',
-                message: `Ù‡Ù„ Ø£Ù†Øª Ù…ØªØ£ÙƒØ¯ Ù…Ù† Ù†Ù‚Ù„ ${selectedIds.size} Ø³Ø¬Ù„ Ù…Ø­Ø¯Ø¯ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§ØªØŸ`,
-                confirmText: 'Ù†Ø¹Ù…ØŒ Ø§Ø­Ø°Ù',
-                cancelText: 'Ø¥Ù„ØºØ§Ø¡',
+                title: 'نقل إلى سلة المهملات',
+                message: `هل أنت متأكد من نقل ${selectedIds.size} سجل محدد إلى سلة المهملات؟`,
+                confirmText: 'نعم، احذف',
+                cancelText: 'إلغاء',
                 type: 'danger'
             });
             if (!confirmed) return;
 
             const targetRecords = records.filter(r => selectedIds.has(r.id));
-            await moveToTrash(targetRecords, currentSheetId, currentSheet?.name || 'Ø´ÙŠØª');
+            await moveToTrash(targetRecords, currentSheetId, currentSheet?.name || 'شيت');
             const updated = records.filter(r => !selectedIds.has(r.id));
             await saveRecords(updated);
             setSelectedIds(new Set());
-            showToast(`ØªÙ… Ù†Ù‚Ù„ ${targetRecords.length} Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
+            showToast(`تم نقل ${targetRecords.length} سجل إلى سلة المهملات بنجاح ✓`, 'success');
         }
     };
 
@@ -1269,7 +1269,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (newItems.length > 0) {
             saveRecords([...newItems, ...records]);
-            showToast(`ØªÙ…Øª Ø¥Ø¶Ø§ÙØ© ${newItems.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
+            showToast(`تمت إضافة ${newItems.length} سجل بنجاح ✓`, 'success');
             setBulkText('');
             setShowBulkModal(false);
         }
@@ -1278,66 +1278,66 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     // Export to Excel
     const handleExportExcel = () => {
         if (records.length === 0) {
-            showToast('Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¨ÙŠØ§Ù†Ø§Øª Ù„ØªØµØ¯ÙŠØ±Ù‡Ø§', 'warning');
+            showToast('لا توجد بيانات لتصديرها', 'warning');
             return;
         }
 
         let dataToExport;
         if (isTrashSheet) {
             dataToExport = records.map((r, i) => ({
-                'Ù…': i + 1,
-                'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„': r.name || '',
-                'Ø±Ù‚Ù…/ÙŠÙˆØ²Ø± Ø§Ù„ØªÙˆØ§ØµÙ„': r.phone || '',
-                'ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„': r.contactChannel || '',
-                'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
+                'م': i + 1,
+                'اسم العميل': r.name || '',
+                'رقم/يوزر التواصل': r.phone || '',
+                'وسيلة التواصل': r.contactChannel || '',
+                'البريد الإلكتروني (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
-                'Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ': r.originSheetName || '',
-                'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)': r.selectedAccount || '',
-                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø­Ø°Ù': r.deletedAt ? new Date(r.deletedAt).toLocaleString('ar-EG') : '',
-                'Ù…Ù„Ø§Ø­Ø¸Ø§Øª': r.notes || '',
-                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
+                'الشيت الأصلي': r.originSheetName || '',
+                'بيانات الحساب (Account)': r.selectedAccount || '',
+                'تاريخ الحذف': r.deletedAt ? new Date(r.deletedAt).toLocaleString('ar-EG') : '',
+                'ملاحظات': r.notes || '',
+                'تاريخ الإضافة': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
             }));
         } else if (isClientOrMerchant) {
             dataToExport = records.map((r, i) => ({
-                'Ù…': i + 1,
-                'Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„': r.name || '',
-                'Ø±Ù‚Ù…/ÙŠÙˆØ²Ø± Ø§Ù„ØªÙˆØ§ØµÙ„': r.phone || '',
-                'ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„': r.contactChannel || '',
-                'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
+                'م': i + 1,
+                'اسم العميل': r.name || '',
+                'رقم/يوزر التواصل': r.phone || '',
+                'وسيلة التواصل': r.contactChannel || '',
+                'البريد الإلكتروني (Email)': r.email || '',
                 'Outlook Password': r.password || '',
                 'Adobe Password': r.password2 || '',
-                'Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Duration)': r.duration || '',
-                'ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Start Date)': r.startDate || '',
-                'Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Device Type)': r.deviceType || 'Ø¬Ù‡Ø§Ø²',
-                'Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹ (Payment Status)': r.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹',
-                'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)': r.selectedAccount || '',
-                'Ù…Ù„Ø§Ø­Ø¸Ø§Øª': r.notes || '',
-                'ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
+                'مدة الاشتراك (Duration)': r.duration || '',
+                'تاريخ بداية الاشتراك (Start Date)': r.startDate || '',
+                'نوع الاشتراك (Device Type)': r.deviceType || 'جهاز',
+                'حالة الدفع (Payment Status)': r.paymentStatus || 'مدفوع',
+                'بيانات الحساب (Account)': r.selectedAccount || '',
+                'ملاحظات': r.notes || '',
+                'تاريخ الإضافة': r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : ''
             }));
         } else {
             dataToExport = records.map((r, i) => {
                 const base = {
-                    'Ù…': i + 1,
-                    'Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)': r.email || '',
-                    'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 1 (Password)': r.password || '',
-                    'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 2 (Password 2)': r.password2 || '',
-                    'Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø© (Invoice)': r.invoiceNumber || '',
-                    'Ø§Ù„ÙÙŠØ²Ø§ (Visa)': r.visa || '',
+                    'م': i + 1,
+                    'البريد الإلكتروني (Email)': r.email || '',
+                    'كلمة المرور 1 (Password)': r.password || '',
+                    'كلمة المرور 2 (Password 2)': r.password2 || '',
+                    'رقم الفاتورة (Invoice)': r.invoiceNumber || '',
+                    'الفيزا (Visa)': r.visa || '',
                     'Edu Mail': r.visaAccount || ''
                 };
                 if (currentSheetId === 'account_data') {
                     const rem = getAccountReminder(r);
-                    base['ØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨ (Creation Date)'] = r.accountCreatedDate || '';
-                    base['ÙØªØ±Ø© Ø§Ù„ØªØ°ÙƒÙŠØ± Ø¨Ø§Ù„Ø£ÙŠØ§Ù… (Reminder Days)'] = r.reminderDays || '';
-                    base['Ø­Ø§Ù„Ø© Ø§Ù„ØªØ°ÙƒÙŠØ±'] = rem.text || '';
-                    base['ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] = r.offerActivated ? 'ØªÙ…' : 'Ù„Ù… ÙŠØªÙ…';
-                    base['ØªØ§Ø±ÙŠØ® ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'] = r.offerActivatedAt ? new Date(r.offerActivatedAt).toLocaleString('ar-EG') : '';
+                    base['تاريخ إنشاء الحساب (Creation Date)'] = r.accountCreatedDate || '';
+                    base['فترة التذكير بالأيام (Reminder Days)'] = r.reminderDays || '';
+                    base['حالة التذكير'] = rem.text || '';
+                    base['تم تفعيل العرض'] = r.offerActivated ? 'تم' : 'لم يتم';
+                    base['تاريخ تفعيل العرض'] = r.offerActivatedAt ? new Date(r.offerActivatedAt).toLocaleString('ar-EG') : '';
                 } else {
-                    base['Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨ (Account)'] = r.selectedAccount || '';
+                    base['بيانات الحساب (Account)'] = r.selectedAccount || '';
                 }
-                base['Ù…Ù„Ø§Ø­Ø¸Ø§Øª'] = r.notes || '';
-                base['ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ø¶Ø§ÙØ©'] = r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '';
+                base['ملاحظات'] = r.notes || '';
+                base['تاريخ الإضافة'] = r.created_at ? new Date(r.created_at).toLocaleString('ar-EG') : '';
                 return base;
             });
         }
@@ -1346,7 +1346,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, currentSheet.name);
         XLSX.writeFile(wb, `${currentSheet.name}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-        showToast('ØªÙ… ØªØµØ¯ÙŠØ± Ù…Ù„Ù Excel Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        showToast('تم تصدير ملف Excel بنجاح ✓', 'success');
     };
 
     // Export to JSON Backup
@@ -1360,7 +1360,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         a.download = `Service_Hub_Sheets_Backup_${new Date().toISOString().slice(0, 10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast('ØªÙ… Ø­ÙØ¸ Ù†Ø³Ø®Ø© Ø§Ø­ØªÙŠØ§Ø·ÙŠØ© Ø´Ø§Ù…Ù„Ø© Ù„Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø´ÙŠØªØ§Øª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        showToast('تم حفظ نسخة احتياطية شاملة لجميع الشيتات بنجاح ✓', 'success');
     };
 
     // Import Excel or JSON
@@ -1383,14 +1383,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         });
                         loadCurrentSheetData();
                         refreshAllCounts();
-                        showToast('ØªÙ… Ø§Ø³ØªØ¹Ø§Ø¯Ø© Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø´ÙŠØªØ§Øª Ù…Ù† Ø§Ù„Ù†Ø³Ø®Ø© Ø§Ù„Ø§Ø­ØªÙŠØ§Ø·ÙŠØ© Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+                        showToast('تم استعادة جميع الشيتات من النسخة الاحتياطية بنجاح ✓', 'success');
                     } else if (Array.isArray(parsed)) {
                         // Single sheet
                         saveRecords([...parsed, ...records]);
-                        showToast(`ØªÙ… Ø§Ø³ØªÙŠØ±Ø§Ø¯ ${parsed.length} Ø³Ø¬Ù„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
+                        showToast(`تم استيراد ${parsed.length} سجل بنجاح ✓`, 'success');
                     }
                 } catch (err) {
-                    showToast('Ù…Ù„Ù Ø§Ù„Ù†Ø³Ø® Ø§Ù„Ø§Ø­ØªÙŠØ§Ø·ÙŠ ØºÙŠØ± ØµØ§Ù„Ø­', 'error');
+                    showToast('ملف النسخ الاحتياطي غير صالح', 'error');
                 }
             };
             reader.readAsText(file);
@@ -1405,7 +1405,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
                     if (jsonData.length <= 1) {
-                        showToast('Ø§Ù„Ù…Ù„Ù ÙØ§Ø±Øº Ø£Ùˆ Ù„Ø§ ÙŠØ­ØªÙˆÙŠ Ø¹Ù„Ù‰ ØµÙÙˆÙ Ø¨ÙŠØ§Ù†Ø§Øª', 'warning');
+                        showToast('الملف فارغ أو لا يحتوي على صفوف بيانات', 'warning');
                         return;
                     }
 
@@ -1444,13 +1444,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                     if (imported.length > 0) {
                         saveRecords([...imported, ...records]);
-                        showToast(`ØªÙ… Ø§Ø³ØªÙŠØ±Ø§Ø¯ ${imported.length} Ø³Ø¬Ù„ Ù…Ù† Ù…Ù„Ù Ø§Ù„Ø¥ÙƒØ³ÙŠÙ„ Ø¨Ù†Ø¬Ø§Ø­ âœ“`, 'success');
+                        showToast(`تم استيراد ${imported.length} سجل من ملف الإكسيل بنجاح ✓`, 'success');
                     } else {
-                        showToast('Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø«ÙˆØ± Ø¹Ù„Ù‰ Ø³Ø¬Ù„Ø§Øª ØµØ§Ù„Ø­Ø© Ù„Ù„Ø§Ø³ØªÙŠØ±Ø§Ø¯', 'warning');
+                        showToast('لم يتم العثور على سجلات صالحة للاستيراد', 'warning');
                     }
                 } catch (err) {
                     console.error(err);
-                    showToast('Ø­Ø¯Ø« Ø®Ø·Ø£ Ø£Ø«Ù†Ø§Ø¡ Ù‚Ø±Ø§Ø¡Ø© Ù…Ù„Ù Ø§Ù„Ø¥ÙƒØ³ÙŠÙ„', 'error');
+                    showToast('حدث خطأ أثناء قراءة ملف الإكسيل', 'error');
                 }
             };
             reader.readAsArrayBuffer(file);
@@ -1472,10 +1472,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setSheetsList(updated);
         sheetsAPI.saveSheetsConfig(updated);
         setShowRenameModal(false);
-        showToast('ØªÙ… ØªØ­Ø¯ÙŠØ« Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª Ø¨Ù†Ø¬Ø§Ø­ âœ“', 'success');
+        showToast('تم تحديث اسم الشيت بنجاح ✓', 'success');
     };
 
-    // Subscriptions & Account Alert Groups (Ù‚Ø±Ø¨ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯ / Ø§Ù„ØªØ°ÙƒÙŠØ± ÙÙŠ Ø¢Ø®Ø± 3 Ø£ÙŠØ§Ù…ØŒ ÙˆÙ…Ù†ØªÙ‡ÙŠ/Ù…Ø³ØªØ­Ù‚ØŒ ÙˆØ³Ø§Ø±ÙŠ)
+    // Subscriptions & Account Alert Groups (قرب التجديد / التذكير في آخر 3 أيام، ومنتهي/مستحق، وساري)
     const alertGroups = useMemo(() => {
         if (currentSheetId === 'trash_data') {
             return { nearRenewal: [], expired: [], active: [] };
@@ -1613,22 +1613,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         // Advanced filters: paymentStatus filter
         if (paymentFilter !== 'all' && isClientOrMerchant) {
             result = result.filter(r => {
-                const status = String(r.paymentStatus || 'Ù…Ø¯ÙÙˆØ¹').toLowerCase();
-                if (paymentFilter === 'paid') return status === 'Ù…Ø¯ÙÙˆØ¹';
-                if (paymentFilter === 'unpaid') return status !== 'Ù…Ø¯ÙÙˆØ¹';
+                const status = String(r.paymentStatus || 'مدفوع').toLowerCase();
+                if (paymentFilter === 'paid') return status === 'مدفوع';
+                if (paymentFilter === 'unpaid') return status !== 'مدفوع';
                 return true;
             });
         }
 
-        // Advanced filters: deviceType filter (Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ)
+        // Advanced filters: deviceType filter (شخصي أم مشترك)
         if (deviceFilter !== 'all' && isClientOrMerchant) {
             result = result.filter(r => {
                 const dev = String(r.deviceType || '').trim();
-                if (deviceFilter === 'Ø´Ø®ØµÙŠ') {
-                    return dev === 'Ø´Ø®ØµÙŠ' || dev === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+                if (deviceFilter === 'شخصي') {
+                    return dev === 'شخصي' || dev === 'جهازين';
                 }
-                if (deviceFilter === 'Ù…Ø´ØªØ±Ùƒ') {
-                    return dev === 'Ù…Ø´ØªØ±Ùƒ' || dev === 'Ø¬Ù‡Ø§Ø²' || dev === '' || (!r.deviceType);
+                if (deviceFilter === 'مشترك') {
+                    return dev === 'مشترك' || dev === 'جهاز' || dev === '' || (!r.deviceType);
                 }
                 return dev === deviceFilter;
             });
@@ -1802,7 +1802,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                     <div>
                         <p className="text-xs font-bold text-slate-400 dark:text-slate-500">
-                            {isTrashSheet ? 'Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ù…Ø­Ø°ÙˆÙØ§Øª' : 'Ø¥Ø¬Ù…Ø§Ù„ÙŠ Ø§Ù„Ø³Ø¬Ù„Ø§Øª'}
+                            {isTrashSheet ? 'إجمالي المحذوفات' : 'إجمالي السجلات'}
                         </p>
                         <h4 className={`text-2xl font-black ${isTrashSheet ? 'text-rose-600 dark:text-rose-400' : 'text-slate-800 dark:text-white'} mt-1`}>
                             {stats.total}
@@ -1817,7 +1817,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ù…Ø­Ø°ÙˆÙØ©</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات محذوفة</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.accountsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1827,7 +1827,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¹Ù…Ù„Ø§Ø¡ Ù…Ø­Ø°ÙˆÙÙŠÙ†</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">عملاء محذوفين</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.clientsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1837,7 +1837,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ¬Ø§Ø± Ù…Ø­Ø°ÙˆÙÙŠÙ†</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تجار محذوفين</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.merchantsCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1849,7 +1849,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ù…Ø¯Ø© Ø§Ø´ØªØ±Ø§Ùƒ Ù…Ø³Ø¬Ù„Ø©</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">مدة اشتراك مسجلة</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.withDuration}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1859,7 +1859,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¨Ø§Ø³ÙˆØ±Ø¯ Ø£ÙˆÙ„ ÙˆØ«Ø§Ù†Ù</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">باسورد أول وثانٍ</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withBothPasswords}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1869,7 +1869,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…Ø³Ø¬Ù„Ø©</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">إيميلات مسجلة</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.withEmail}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1881,7 +1881,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ°ÙƒÙŠØ±Ø§Øª Ø§Ù„ÙŠÙˆÙ… â°</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تذكيرات اليوم ⏰</p>
                                 <h4 className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-1">{stats.todayCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 flex items-center justify-center text-xl">
@@ -1891,7 +1891,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ù‚Ø§Ø¯Ù…Ø© Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">قادمة خلال 3 أيام</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.nearCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1901,7 +1901,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªÙ… Ø¥Ù†Ø¬Ø§Ø²Ù‡Ø§</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تم إنجازها</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.completedCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1913,7 +1913,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ø¨ØªØ°ÙƒÙŠØ± Ù…Ø­Ø¯Ø¯</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات بتذكير محدد</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withReminder}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1923,7 +1923,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">ØªØ°ÙƒÙŠØ±Ø§Øª Ù‚Ø±ÙŠØ¨Ø© / Ù…Ø³ØªØ­Ù‚Ø©</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">تذكيرات قريبة / مستحقة</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.nearCount + stats.expiredCount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1933,7 +1933,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…Ø³Ø¬Ù„Ø©</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">إيميلات مسجلة</p>
                                 <h4 className="text-2xl font-black text-blue-600 dark:text-blue-400 mt-1">{stats.withEmail}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-xl">
@@ -1945,7 +1945,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <>
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø³Ø¬Ù„Ø§Øª Ø¨ÙÙˆØ§ØªÙŠØ±</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">سجلات بفواتير</p>
                                 <h4 className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-1">{stats.withInvoices}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center text-xl">
@@ -1955,7 +1955,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø³Ø¬Ù„Ø§Øª Ø¨ÙÙŠØ²Ø§</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">سجلات بفيزا</p>
                                 <h4 className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">{stats.withVisa}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-xl">
@@ -1965,7 +1965,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm flex items-center justify-between">
                             <div>
-                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„ÙÙŠØ²Ø§</p>
+                                <p className="text-xs font-bold text-slate-400 dark:text-slate-500">حسابات الفيزا</p>
                                 <h4 className="text-2xl font-black text-purple-600 dark:text-purple-400 mt-1">{stats.withVisaAccount}</h4>
                             </div>
                             <div className="w-12 h-12 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center text-xl">
@@ -1998,7 +1998,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             setShowRenameModal(true);
                                         }}
                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition text-xs p-1"
-                                        title="ØªØ¹Ø¯ÙŠÙ„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª"
+                                        title="تعديل اسم الشيت"
                                     >
                                         <i className="fa-solid fa-pen-to-square"></i>
                                     </button>
@@ -2006,14 +2006,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </div>
                             <p className="text-xs text-slate-400 dark:text-slate-500">
                                 {isTrashSheet
-                                    ? 'Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª: Ø§Ø³ØªØ¹Ø±Ø§Ø¶ Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª ÙˆØ§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ù…Ø­Ø°ÙˆÙØ© Ù…Ø¹ Ø¥Ù…ÙƒØ§Ù†ÙŠØ© Ø§Ø³ØªØ±Ø¯Ø§Ø¯Ù‡Ø§ Ù„Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ Ø£Ùˆ Ø­Ø°ÙÙ‡Ø§ Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹'
+                                    ? 'سلة المهملات: استعراض الحسابات والبيانات المحذوفة مع إمكانية استردادها للشيت الأصلي أو حذفها نهائياً'
                                     : currentSheetId === 'reminders_data'
-                                    ? 'Ø¬Ø¯ÙˆÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±Ø§Øª ÙˆØ§Ù„Ù…Ù‡Ø§Ù…: ØªØ°ÙƒÙŠØ± Ø¨Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯Ø§Øª ÙˆØ§Ù„Ø§Ù„ØªØ²Ø§Ù…Ø§Øª Ø§Ù„Ù‡Ø§Ù…Ø© ÙÙŠ Ø£ÙŠØ§Ù… Ù…Ø­Ø¯Ø¯Ø© Ù„ØªØ¬Ù†Ø¨ Ù†Ø³ÙŠØ§Ù†Ù‡Ø§'
+                                    ? 'جدول التذكيرات والمهام: تذكير بمواعيد التجديدات والالتزامات الهامة في أيام محددة لتجنب نسيانها'
                                     : isClientOrMerchant
-                                    ? 'Ø§Ù„Ø¹Ù…Ù„Ø§Ø¡ ÙˆØ§Ù„Ø§Ø´ØªØ±Ø§ÙƒØ§Øª'
+                                    ? 'العملاء والاشتراكات'
                                     : currentSheetId === 'account_data'
-                                    ? 'Ø§Ù„Ø­Ø³Ø§Ø¨Ø§Øª Ø§Ù„Ù…ØªØ§Ø­Ø© ÙˆØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±ÙˆØ¶'
-                                    : 'Ø§Ù„Ø³Ø¬Ù„Ø§Øª'}
+                                    ? 'الحسابات المتاحة وتفعيل العروض'
+                                    : 'السجلات'}
                             </p>
                         </div>
                     </div>
@@ -2026,10 +2026,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <button
                                         onClick={handleEmptyTrash}
                                         className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 dark:text-rose-300 border border-rose-200/80 dark:border-rose-800/60 px-4 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 shadow-xs transition transform active:scale-95 cursor-pointer"
-                                        title="Ø­Ø°Ù Ø¬Ù…ÙŠØ¹ Ø§Ù„Ø³Ø¬Ù„Ø§Øª ÙÙŠ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª Ù†Ù‡Ø§Ø¦ÙŠØ§Ù‹"
+                                        title="حذف جميع السجلات في سلة المهملات نهائياً"
                                     >
                                         <i className="fa-solid fa-trash-can"></i>
-                                        <span>Ø¥ÙØ±Ø§Øº Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª</span>
+                                        <span>إفراغ سلة المهملات</span>
                                     </button>
                                 )}
                             </>
@@ -2044,14 +2044,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         setFormData({
                                             name: '',
                                             phone: '',
-                                            contactChannel: 'ÙˆØ§ØªØ³Ø§Ø¨',
+                                            contactChannel: 'واتساب',
                                             email: '',
-                                            password: currentSheetId === 'reminders_data' ? 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹' : '',
+                                            password: currentSheetId === 'reminders_data' ? '🔴 عاجل جداً' : '',
                                             password2: '',
                                             duration: '',
                                             startDate: new Date().toISOString().slice(0, 10),
-                                            deviceType: 'Ù…Ø´ØªØ±Ùƒ',
-                                            paymentStatus: 'Ù…Ø¯ÙÙˆØ¹',
+                                            deviceType: 'مشترك',
+                                            paymentStatus: 'مدفوع',
                                             selectedAccount: '',
                                             invoiceNumber: '',
                                             visa: '',
@@ -2073,7 +2073,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl font-bold text-xs md:text-sm flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition transform active:scale-95 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-plus"></i>
-                                    <span>{currentSheetId === 'reminders_data' ? 'Ø¥Ø¶Ø§ÙØ© ØªØ°ÙƒÙŠØ± Ø¬Ø¯ÙŠØ¯' : 'Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù†Ø§Øª Ø¬Ø¯ÙŠØ¯Ø©'}</span>
+                                    <span>{currentSheetId === 'reminders_data' ? 'إضافة تذكير جديد' : 'إضافة بيانات جديدة'}</span>
                                 </button>
                             )
                         )}
@@ -2091,12 +2091,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder={
                                 currentSheetId === 'reminders_data'
-                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ±ØŒ Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ©ØŒ Ø§Ù„ØªØ§Ø±ÙŠØ®ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
+                                    ? "بحث في عنوان التذكير، الأولوية، التاريخ، الملاحظات..."
                                     : isClientOrMerchant
-                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ..."
+                                    ? "بحث في الإيميل، الباسورد، مدة الاشتراك..."
                                     : currentSheetId === 'account_data'
-                                    ? "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡ØŒ Ø§Ù„ØªØ°ÙƒÙŠØ±ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
-                                    : "Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ØŒ Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ØŒ Ø§Ù„ÙØ§ØªÙˆØ±Ø©ØŒ Ø§Ù„ÙÙŠØ²Ø§ØŒ Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª..."
+                                    ? "بحث في الإيميل، الباسورد، تاريخ الإنشاء، التذكير، الملاحظات..."
+                                    : "بحث في الإيميل، الباسورد، الفاتورة، الفيزا، الملاحظات..."
                             }
                             className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                         />
@@ -2113,7 +2113,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     {/* Page Sizing */}
                     <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
                         <div className="flex items-center gap-2">
-                            <span className="text-xs text-slate-400 font-bold hidden sm:inline">Ø¹Ø±Ø¶:</span>
+                            <span className="text-xs text-slate-400 font-bold hidden sm:inline">عرض:</span>
                             <select
                                 value={pageSize}
                                 onChange={(e) => {
@@ -2126,7 +2126,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <option value={25}>25</option>
                                 <option value={50}>50</option>
                                 <option value={100}>100</option>
-                                <option value="all">Ø§Ù„ÙƒÙ„</option>
+                                <option value="all">الكل</option>
                             </select>
                         </div>
                     </div>
@@ -2174,12 +2174,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 {currentSheetId === 'reminders_data' && (
                     <div className="flex flex-wrap items-center gap-2 pt-3">
                         {[
-                            { id: 'all', label: 'ÙƒÙ„ Ø§Ù„ØªØ°ÙƒÙŠØ±Ø§Øª', count: records.length, icon: 'fa-list', cls: 'slate' },
-                            { id: 'pending', label: 'Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±', count: offerReminderStats.pending, icon: 'fa-hourglass-half', cls: 'purple' },
-                            { id: 'today', label: 'ØªØ°ÙƒÙŠØ±Ø§Øª Ø§Ù„ÙŠÙˆÙ…', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
-                            { id: 'near3', label: 'Ù‚Ø§Ø¯Ù…Ø© Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
-                            { id: 'overdue', label: 'Ù…ØªØ£Ø®Ø±Ø©', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
-                            { id: 'completed', label: 'ØªÙ… Ø§Ù„Ø¥Ù†Ø¬Ø§Ø²', count: offerReminderStats.completed, icon: 'fa-circle-check', cls: 'emerald' },
+                            { id: 'all', label: 'كل التذكيرات', count: records.length, icon: 'fa-list', cls: 'slate' },
+                            { id: 'pending', label: 'قيد الانتظار', count: offerReminderStats.pending, icon: 'fa-hourglass-half', cls: 'purple' },
+                            { id: 'today', label: 'تذكيرات اليوم', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
+                            { id: 'near3', label: 'قادمة خلال 3 أيام', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
+                            { id: 'overdue', label: 'متأخرة', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
+                            { id: 'completed', label: 'تم الإنجاز', count: offerReminderStats.completed, icon: 'fa-circle-check', cls: 'emerald' },
                         ].map(item => {
                             const active = offerReminderFilter === item.id;
                             const colorClass = item.cls === 'amber'
@@ -2217,11 +2217,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 {currentSheetId === 'account_data' && (
                     <div className="flex flex-wrap items-center gap-2 pt-3">
                         {[
-                            { id: 'all', label: 'ÙƒÙ„ Ø§Ù„Ø³Ø¬Ù„Ø§Øª', count: records.length, icon: 'fa-list', cls: 'slate' },
-                            { id: 'pending', label: 'Ù„Ù… ÙŠØªÙ… Ø§Ù„Ø¹Ø±Ø¶', count: offerReminderStats.pending, icon: 'fa-bolt', cls: 'purple' },
-                            { id: 'near3', label: 'Ù‚Ø±Ø¨ Ø®Ù„Ø§Ù„ 3 Ø£ÙŠØ§Ù…', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
-                            { id: 'today', label: 'Ù…ÙŠØ¹Ø§Ø¯Ù‡ Ø§Ù„ÙŠÙˆÙ…', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
-                            { id: 'overdue', label: 'Ø¹Ø¯Ù‰ Ø¨Ø¯ÙˆÙ† ØªÙØ¹ÙŠÙ„', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
+                            { id: 'all', label: 'كل السجلات', count: records.length, icon: 'fa-list', cls: 'slate' },
+                            { id: 'pending', label: 'لم يتم العرض', count: offerReminderStats.pending, icon: 'fa-bolt', cls: 'purple' },
+                            { id: 'near3', label: 'قرب خلال 3 أيام', count: offerReminderStats.near3, icon: 'fa-clock', cls: 'amber' },
+                            { id: 'today', label: 'ميعاده اليوم', count: offerReminderStats.today, icon: 'fa-bell', cls: 'red' },
+                            { id: 'overdue', label: 'عدى بدون تفعيل', count: offerReminderStats.overdue, icon: 'fa-triangle-exclamation', cls: 'rose' },
                         ].map(item => {
                             const active = offerReminderFilter === item.id;
                             const colorClass = item.cls === 'amber'
@@ -2265,10 +2265,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     >
                         <div className="flex items-center gap-2">
                             <i className="fa-solid fa-sliders text-indigo-500"></i>
-                            <span>ÙÙ„Ø§ØªØ± Ù…ØªÙ‚Ø¯Ù…Ø©</span>
+                            <span>فلاتر متقدمة</span>
                             {(paymentFilter !== 'all' || deviceFilter !== 'all' || renewalFilter !== 'all' || accountStockFilter !== 'all') && (
                                 <span className="bg-indigo-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full animate-pulse">
-                                    {[paymentFilter !== 'all' ? 1 : 0, deviceFilter !== 'all' ? 1 : 0, renewalFilter !== 'all' ? 1 : 0, accountStockFilter !== 'all' ? 1 : 0].reduce((a,b)=>a+b,0)} ÙØ¹Ù‘Ø§Ù„
+                                    {[paymentFilter !== 'all' ? 1 : 0, deviceFilter !== 'all' ? 1 : 0, renewalFilter !== 'all' ? 1 : 0, accountStockFilter !== 'all' ? 1 : 0].reduce((a,b)=>a+b,0)} فعّال
                                 </span>
                             )}
                         </div>
@@ -2281,13 +2281,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-money-bill-wave text-emerald-500"></i>
-                                    Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹
+                                    حالة الدفع
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {[
-                                        { id: 'all', label: 'Ø§Ù„ÙƒÙ„', icon: 'fa-list' },
-                                        { id: 'paid', label: 'âœ… Ù…Ø¯ÙÙˆØ¹', icon: 'fa-check-circle' },
-                                        { id: 'unpaid', label: 'âŒ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹', icon: 'fa-times-circle' },
+                                        { id: 'all', label: 'الكل', icon: 'fa-list' },
+                                        { id: 'paid', label: '✅ مدفوع', icon: 'fa-check-circle' },
+                                        { id: 'unpaid', label: '❌ غير مدفوع', icon: 'fa-times-circle' },
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -2305,13 +2305,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-users-gear text-blue-500"></i>
-                                    Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
+                                    نوع الاشتراك
                                 </p>
                                 <div className="flex flex-wrap gap-2">
                                     {[
-                                        { id: 'all', label: 'Ø§Ù„ÙƒÙ„' },
-                                        { id: 'Ø´Ø®ØµÙŠ', label: 'ðŸ›¡ï¸ Ø´Ø®ØµÙŠ' },
-                                        { id: 'Ù…Ø´ØªØ±Ùƒ', label: 'ðŸ’» Ù…Ø´ØªØ±Ùƒ' },
+                                        { id: 'all', label: 'الكل' },
+                                        { id: 'شخصي', label: '🛡️ شخصي' },
+                                        { id: 'مشترك', label: '💻 مشترك' },
                                     ].map(opt => (
                                         <button
                                             key={opt.id}
@@ -2385,7 +2385,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-rose-200 bg-rose-50 text-rose-600 text-[11px] font-bold hover:bg-rose-100 transition"
                                     >
                                         <i className="fa-solid fa-rotate-right"></i>
-                                        Ø¥Ø¹Ø§Ø¯Ø© ØªØ¹ÙŠÙŠÙ† Ø§Ù„ÙÙ„Ø§ØªØ± Ø§Ù„Ù…ØªÙ‚Ø¯Ù…Ø©
+                                        إعادة تعيين الفلاتر المتقدمة
                                     </button>
                                 </div>
                             )}
@@ -2408,17 +2408,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ± ÙˆØ§Ù„Ù…Ù‡Ù…Ø©</span>
+                                                <span>عنوان التذكير والمهمة</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-2 py-1.5 text-center">Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© / Ø§Ù„ØªØµÙ†ÙŠÙ</th>
+                                        <th className="px-2 py-1.5 text-center">الأولوية / التصنيف</th>
                                         <th
                                             onClick={() => setSortBy({ field: 'accountCreatedDate', asc: sortBy.field === 'accountCreatedDate' ? !sortBy.asc : true })}
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±</span>
+                                                <span>موعد التذكير</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
@@ -2427,11 +2427,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-2 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>Ø§Ù„Ø­Ø§Ù„Ø© ÙˆØ§Ù„Ù…ØªØ¨Ù‚ÙŠ</span>
+                                                <span>الحالة والمتبقي</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
-                                        <th className="px-2 py-1.5">Ø§Ù„Ù…Ù„Ø§Ø­Ø¸Ø§Øª ÙˆØ§Ù„ØªÙØ§ØµÙŠÙ„</th>
+                                        <th className="px-2 py-1.5">الملاحظات والتفاصيل</th>
                                     </>
                                 ) : (
                                     <>
@@ -2442,7 +2442,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„</span>
+                                                        <span>اسم العميل</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2451,11 +2451,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ù„ØªÙˆØ§ØµÙ„</span>
+                                                        <span>التواصل</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
-                                                <th className="px-1.5 py-1.5">Ø§Ù„ÙˆØ³ÙŠÙ„Ø©</th>
+                                                <th className="px-1.5 py-1.5">الوسيلة</th>
                                             </>
                                         )}
                                         <th
@@ -2463,7 +2463,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                         >
                                             <div className="flex items-center gap-1">
-                                                <span>Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ</span>
+                                                <span>البريد الإلكتروني</span>
                                                 <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                             </div>
                                         </th>
@@ -2484,7 +2484,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø£ØµÙ„ÙŠ</span>
+                                                        <span>الشيت الأصلي</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2493,7 +2493,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-rose-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>ØªØ§Ø±ÙŠØ® Ø§Ù„Ø­Ø°Ù</span>
+                                                        <span>تاريخ الحذف</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2502,7 +2502,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-purple-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                                        <span>بيانات الحساب</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2514,7 +2514,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ</span>
+                                                        <span>مدة الاشتراك</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2523,7 +2523,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©</span>
+                                                        <span>المدة المتبقية</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2532,7 +2532,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ</span>
+                                                        <span>نوع الاشتراك</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2541,7 +2541,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹</span>
+                                                        <span>حالة الدفع</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2553,7 +2553,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</span>
+                                                        <span>تاريخ الإنشاء</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2562,7 +2562,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ù„ØªØ°ÙƒÙŠØ±</span>
+                                                        <span>التذكير</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2571,11 +2571,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                                        <span>استخدام الحساب</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
-                                                <th className="px-1.5 py-1.5">ØªÙØ§ØµÙŠÙ„ Ø§Ù„Ù†ÙˆØ¹</th>
+                                                <th className="px-1.5 py-1.5">تفاصيل النوع</th>
                                             </>
                                         ) : (
                                             <>
@@ -2584,18 +2584,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø©</span>
+                                                        <span>رقم الفاتورة</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
-                                                <th className="px-1.5 py-1.5">Ø§Ù„ÙÙŠØ²Ø§</th>
+                                                <th className="px-1.5 py-1.5">الفيزا</th>
                                                 <th className="px-1.5 py-1.5">Edu Mail</th>
                                                 <th
                                                     onClick={() => setSortBy({ field: 'selectedAccount', asc: sortBy.field === 'selectedAccount' ? !sortBy.asc : true })}
                                                     className="px-1.5 py-1.5 cursor-pointer hover:text-indigo-600 transition"
                                                 >
                                                     <div className="flex items-center gap-1">
-                                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                                        <span>بيانات الحساب</span>
                                                         <i className="fa-solid fa-sort text-[8px] text-slate-400"></i>
                                                     </div>
                                                 </th>
@@ -2603,7 +2603,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         )}
                                     </>
                                 )}
-                                <th className="px-1 py-1.5 text-center w-12 text-[11px]">Ø¥Ø¬Ø±Ø§Ø¡Ø§Øª</th>
+                                <th className="px-1 py-1.5 text-center w-12 text-[11px]">إجراءات</th>
                             </tr>
                         </thead>
 
@@ -2615,10 +2615,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <i className={`fa-solid ${isTrashSheet ? 'fa-trash-can text-rose-400' : (currentSheetId === 'reminders_data' ? 'fa-bell text-amber-500' : 'fa-folder-open')}`}></i>
                                         </div>
                                         <p className="font-bold text-sm">
-                                            {isTrashSheet ? 'Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª ÙØ§Ø±ØºØ© ØªÙ…Ø§Ù…Ø§Ù‹' : (currentSheetId === 'reminders_data' ? 'Ù„Ø§ ØªÙˆØ¬Ø¯ ØªØ°ÙƒÙŠØ±Ø§Øª Ù…Ø³Ø¬Ù„Ø© Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†' : 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø³Ø¬Ù„Ø§Øª ÙÙŠ Ù‡Ø°Ø§ Ø§Ù„Ø´ÙŠØª Ø­ØªÙ‰ Ø§Ù„Ø¢Ù†')}
+                                            {isTrashSheet ? 'سلة المهملات فارغة تماماً' : (currentSheetId === 'reminders_data' ? 'لا توجد تذكيرات مسجلة حتى الآن' : 'لا توجد سجلات في هذا الشيت حتى الآن')}
                                         </p>
                                         <p className="text-xs mt-1 text-slate-400">
-                                            {isTrashSheet ? 'Ø£ÙŠ Ø­Ø³Ø§Ø¨Ø§Øª Ø£Ùˆ Ø¨ÙŠØ§Ù†Ø§Øª ÙŠØªÙ… Ø­Ø°ÙÙ‡Ø§ Ø³ØªØ¸Ù‡Ø± Ù‡Ù†Ø§ ÙˆÙŠÙ…ÙƒÙ†Ùƒ Ø§Ø³ØªØ±Ø¯Ø§Ø¯Ù‡Ø§ ÙÙŠ Ø£ÙŠ ÙˆÙ‚Øª' : (currentSheetId === 'reminders_data' ? 'Ø§Ù†Ù‚Ø± Ø¹Ù„Ù‰ "Ø¥Ø¶Ø§ÙØ© ØªØ°ÙƒÙŠØ± Ø¬Ø¯ÙŠØ¯" Ù„Ø­ÙØ¸ Ù…ÙˆØ¹Ø¯ Ø£Ùˆ Ù…Ù‡Ù…Ø© Ù„Ø§ ØªØ±ÙŠØ¯ Ù†Ø³ÙŠØ§Ù†Ù‡Ø§' : 'Ø§Ù†Ù‚Ø± Ø¹Ù„Ù‰ "Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù† Ø¬Ø¯ÙŠØ¯" Ù„Ù„Ø¨Ø¯Ø¡ ÙÙŠ Ø­ÙØ¸ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª')}
+                                            {isTrashSheet ? 'أي حسابات أو بيانات يتم حذفها ستظهر هنا ويمكنك استردادها في أي وقت' : (currentSheetId === 'reminders_data' ? 'انقر على "إضافة تذكير جديد" لحفظ موعد أو مهمة لا تريد نسيانها' : 'انقر على "إضافة بيان جديد" للبدء في حفظ البيانات')}
                                         </p>
                                     </td>
                                 </tr>
@@ -2649,7 +2649,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
                                                                     : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 text-transparent hover:text-emerald-500 bg-white dark:bg-slate-800'
                                                             }`}
-                                                            title={rec.offerActivated ? 'Ø§Ù†Ù‚Ø± Ù„Ø¥Ù„ØºØ§Ø¡ Ø§Ù„Ø¥Ù†Ø¬Ø§Ø² ÙˆØ¥Ø¹Ø§Ø¯ØªÙ‡ Ù„Ù‚ÙŠØ¯ Ø§Ù„Ø§Ù†ØªØ¸Ø§Ø±' : 'Ø§Ù†Ù‚Ø± Ù„Ù„ØªØ¹Ù„ÙŠÙ… ÙƒÙ…ÙƒØªÙ…Ù„'}
+                                                            title={rec.offerActivated ? 'انقر لإلغاء الإنجاز وإعادته لقيد الانتظار' : 'انقر للتعليم كمكتمل'}
                                                         >
                                                             <i className="fa-solid fa-check text-[10px]"></i>
                                                         </button>
@@ -2657,12 +2657,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <span className={`text-xs font-bold truncate ${
                                                                 rec.offerActivated ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'
                                                             }`} title={rec.email}>
-                                                                {rec.email || 'Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†'}
+                                                                {rec.email || 'بدون عنوان'}
                                                             </span>
                                                             <button
                                                                 onClick={() => handleCopy(rec.email, `rem_${rec.id}`)}
                                                                 className="text-slate-400 hover:text-indigo-600 p-0.5 transition flex-shrink-0"
-                                                                title="Ù†Ø³Ø® Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ±"
+                                                                title="نسخ عنوان التذكير"
                                                             >
                                                                 <i className={`fa-solid ${copiedField === `rem_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                             </button>
@@ -2673,12 +2673,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {/* Priority / Category */}
                                                 <td className="px-2 py-2 text-center whitespace-nowrap">
                                                     {(() => {
-                                                        const p = rec.password || 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ';
-                                                        const isUrgent = p.includes('Ø¹Ø§Ø¬Ù„');
-                                                        const isMedium = p.includes('Ù…ØªÙˆØ³Ø·');
-                                                        const isRenewal = p.includes('ØªØ¬Ø¯ÙŠØ¯');
-                                                        const isClient = p.includes('Ø¹Ù…ÙŠÙ„');
-                                                        const isMoney = p.includes('Ø¯ÙØ¹') || p.includes('Ù…Ø§Ù„ÙŠ') || p.includes('Ø³Ø¯Ø§Ø¯');
+                                                        const p = rec.password || '🟢 عادي';
+                                                        const isUrgent = p.includes('عاجل');
+                                                        const isMedium = p.includes('متوسط');
+                                                        const isRenewal = p.includes('تجديد');
+                                                        const isClient = p.includes('عميل');
+                                                        const isMoney = p.includes('دفع') || p.includes('مالي') || p.includes('سداد');
                                                         const cls = isUrgent
                                                             ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800'
                                                             : isMedium
@@ -2711,7 +2711,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     {rec.offerActivated ? (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                                             <i className="fa-solid fa-circle-check"></i>
-                                                            <span>ØªÙ… Ø§Ù„Ø¥Ù†Ø¬Ø§Ø² âœ“</span>
+                                                            <span>تم الإنجاز ✓</span>
                                                         </span>
                                                     ) : (
                                                         (() => {
@@ -2726,9 +2726,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
                                                                         className="text-[10px] font-bold text-slate-500 hover:text-emerald-600 bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 transition cursor-pointer"
-                                                                        title="ØªØ¹Ù„ÙŠÙ… ÙƒÙ…ÙƒØªÙ…Ù„"
+                                                                        title="تعليم كمكتمل"
                                                                     >
-                                                                        Ø¥Ù†Ø¬Ø§Ø²
+                                                                        إنجاز
                                                                     </button>
                                                                 </div>
                                                             );
@@ -2755,7 +2755,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="ØªØ¹Ø¯ÙŠÙ„"
+                                                                title="تعديل"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -2764,7 +2764,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="Ø­Ø°Ù ÙˆÙ†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª"
+                                                                title="حذف ونقل إلى سلة المهملات"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
@@ -2792,7 +2792,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     const isPassVisible = visibleSecrets[`${rec.id}_pass`] !== false;
                                     const isPass2Visible = visibleSecrets[`${rec.id}_pass2`] !== false;
                                     const isVisaVisible = visibleSecrets[`${rec.id}_visa`];
-                                    const isPersonalRecord = rec.deviceType === 'Ø´Ø®ØµÙŠ' || rec.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+                                    const isPersonalRecord = rec.deviceType === 'شخصي' || rec.deviceType === 'جهازين';
 
                                     return (
                                         <tr
@@ -2819,7 +2819,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     ? 'border-cyan-200 bg-white/65 text-cyan-950 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-100'
                                                                     : 'border-amber-200 bg-white/65 text-amber-950 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-100'
                                                             }`}
-                                                            title={rec.name || 'Ø¹Ù…ÙŠÙ„ Ø¨Ø¯ÙˆÙ† Ø§Ø³Ù…'}
+                                                            title={rec.name || 'عميل بدون اسم'}
                                                         >
                                                             <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md ${
                                                                 isPersonalRecord
@@ -2828,7 +2828,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             }`}>
                                                                 <i className="fa-solid fa-user text-[9px]"></i>
                                                             </span>
-                                                            <span className="truncate text-[11px] font-black">{rec.name || 'Ø¹Ù…ÙŠÙ„ Ø¨Ø¯ÙˆÙ† Ø§Ø³Ù…'}</span>
+                                                            <span className="truncate text-[11px] font-black">{rec.name || 'عميل بدون اسم'}</span>
                                                         </div>
                                                     </td>
                                                     <td className="px-1.5 py-1 max-w-[170px]">
@@ -2847,7 +2847,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                             ? 'text-cyan-500 hover:bg-cyan-100 hover:text-cyan-700 dark:hover:bg-cyan-800/60 dark:hover:text-cyan-100'
                                                                             : 'text-amber-500 hover:bg-amber-100 hover:text-amber-700 dark:hover:bg-amber-800/60 dark:hover:text-amber-100'
                                                                     }`}
-                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªÙˆØ§ØµÙ„"
+                                                                    title="نسخ بيانات التواصل"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `phone_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -2857,17 +2857,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 isPersonalRecord
                                                                     ? 'border-cyan-200 bg-white/65 text-cyan-600 dark:border-cyan-800/70 dark:bg-cyan-900/25 dark:text-cyan-300'
                                                                     : 'border-amber-200 bg-white/65 text-amber-600 dark:border-amber-800/70 dark:bg-amber-900/25 dark:text-amber-300'
-                                                            }`}>Ù„Ø§ ÙŠÙˆØ¬Ø¯ ØªÙˆØ§ØµÙ„</span>
+                                                            }`}>لا يوجد تواصل</span>
                                                         )}
                                                     </td>
                                                     <td className="px-1.5 py-1 whitespace-nowrap">
                                                         <span className={`inline-flex min-w-[86px] items-center justify-center gap-1.5 rounded-lg border px-2 py-1 text-[11px] font-black ${
-                                                            rec.contactChannel === 'Ù…Ø§Ø³Ù†Ø¬Ø±'
+                                                            rec.contactChannel === 'ماسنجر'
                                                                 ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
                                                                 : 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                                                         }`}>
-                                                            <i className={`fa-brands ${rec.contactChannel === 'Ù…Ø§Ø³Ù†Ø¬Ø±' ? 'fa-facebook-messenger' : 'fa-whatsapp'} text-[10px]`}></i>
-                                                            <span>{rec.contactChannel || 'ÙˆØ§ØªØ³Ø§Ø¨'}</span>
+                                                            <i className={`fa-brands ${rec.contactChannel === 'ماسنجر' ? 'fa-facebook-messenger' : 'fa-whatsapp'} text-[10px]`}></i>
+                                                            <span>{rec.contactChannel || 'واتساب'}</span>
                                                         </span>
                                                     </td>
                                                 </>
@@ -2878,7 +2878,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {rec.email ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         {rec.notes && (
-                                                            <span title={`Ù…Ù„Ø§Ø­Ø¸Ø§Øª: ${rec.notes}`} className="text-amber-500/80 hover:text-amber-500 cursor-help mr-0.5">
+                                                            <span title={`ملاحظات: ${rec.notes}`} className="text-amber-500/80 hover:text-amber-500 cursor-help mr-0.5">
                                                                 <i className="fa-solid fa-note-sticky text-[8px]"></i>
                                                             </span>
                                                         )}
@@ -2888,7 +2888,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         <button
                                                             onClick={() => handleCopy(rec.email, `em_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„"
+                                                            title="نسخ الإيميل"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `em_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
@@ -2900,10 +2900,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         ? 'bg-emerald-600 text-white border-emerald-600'
                                                                         : 'bg-slate-900 text-white border-slate-900 hover:bg-slate-700'
                                                                 }`}
-                                                                title="Ù†Ø³Ø® Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„ Ùˆ Adobe Password Ø¨Ø±Ø³Ø§Ù„Ø© Ø¬Ø§Ù‡Ø²Ø©"
+                                                                title="نسخ الإيميل و Adobe Password برسالة جاهزة"
                                                             >
                                                                 <i className={`fa-solid ${copiedField === `adobe_access_${rec.id}` ? 'fa-check' : 'fa-file-lines'} text-[8px]`}></i>
-                                                                <span>{currentSheetId === 'client_data' ? 'Adobe' : 'Ù†Ø³Ø® Adobe'}</span>
+                                                                <span>{currentSheetId === 'client_data' ? 'Adobe' : 'نسخ Adobe'}</span>
                                                             </button>
                                                         )}
                                                     </div>
@@ -2917,19 +2917,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {rec.password ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                            {isPassVisible ? rec.password : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
+                                                            {isPassVisible ? rec.password : '••••••••'}
                                                         </span>
                                                         <button
                                                             onClick={() => toggleSecret(rec.id, 'pass')}
                                                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 transition"
-                                                            title={isPassVisible ? 'Ø¥Ø®ÙØ§Ø¡' : 'Ø¥Ø¸Ù‡Ø§Ø±'}
+                                                            title={isPassVisible ? 'إخفاء' : 'إظهار'}
                                                         >
                                                             <i className={`fa-solid ${isPassVisible ? 'fa-eye-slash' : 'fa-eye'} text-[8px]`}></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleCopy(rec.password, `p1_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯"
+                                                            title="نسخ الباسورد"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `p1_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
@@ -2967,19 +2967,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 ) : rec.password2 ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                            {isPass2Visible ? rec.password2 : 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢'}
+                                                            {isPass2Visible ? rec.password2 : '••••••••'}
                                                         </span>
                                                         <button
                                                             onClick={() => toggleSecret(rec.id, 'pass2')}
                                                             className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 transition"
-                                                            title={isPass2Visible ? 'Ø¥Ø®ÙØ§Ø¡' : 'Ø¥Ø¸Ù‡Ø§Ø±'}
+                                                            title={isPass2Visible ? 'إخفاء' : 'إظهار'}
                                                         >
                                                             <i className={`fa-solid ${isPass2Visible ? 'fa-eye-slash' : 'fa-eye'} text-[8px]`}></i>
                                                         </button>
                                                         <button
                                                             onClick={() => handleCopy(rec.password2, `p2_${rec.id}`)}
                                                             className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                            title="Ù†Ø³Ø® Ø§Ù„Ø¨Ø§Ø³ÙˆØ±Ø¯ 2"
+                                                            title="نسخ الباسورد 2"
                                                         >
                                                             <i className={`fa-solid ${copiedField === `p2_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                         </button>
@@ -3010,7 +3010,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 reminders_data: 'fa-solid fa-bell text-amber-500',
                                                             }[originId] || 'fa-solid fa-file text-slate-400';
 
-                                                            const name = rec.originSheetName || sheetsList.find(s => s.id === originId)?.name || 'Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨';
+                                                            const name = rec.originSheetName || sheetsList.find(s => s.id === originId)?.name || 'بيانات الحساب';
 
                                                             return (
                                                                 <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${originBadgeStyles} whitespace-nowrap`}>
@@ -3044,7 +3044,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.selectedAccount, `acc_tr_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 p-0.5 transition"
-                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨"
+                                                                    title="نسخ بيانات الحساب"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `acc_tr_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3066,7 +3066,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.duration, `dur_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                    title="Ù†Ø³Ø® Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ"
+                                                                    title="نسخ مدة الاشتراك"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `dur_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3075,7 +3075,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <span className="text-slate-300 dark:text-slate-600">-</span>
                                                         )}
                                                     </td>
-                                                    {/* Remaining Time (Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©) */}
+                                                    {/* Remaining Time (المدة المتبقية) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {(() => {
                                                             const remaining = calculateRemainingTime(rec.startDate, rec.duration, rec.created_at);
@@ -3102,8 +3102,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             }[remaining.status] || 'fa-regular fa-clock text-[8px] text-slate-400';
 
                                                             const tooltip = remaining.status === 'lifetime'
-                                                                ? 'Ø§Ø´ØªØ±Ø§Ùƒ Ù…Ø¯Ù‰ Ø§Ù„Ø­ÙŠØ§Ø©'
-                                                                : `ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¨Ø¯Ø§ÙŠØ©: ${remaining.startDate || '-'} | ØªØ§Ø±ÙŠØ® Ø§Ù„Ø§Ù†ØªÙ‡Ø§Ø¡: ${remaining.endDate || '-'}`;
+                                                                ? 'اشتراك مدى الحياة'
+                                                                : `تاريخ البداية: ${remaining.startDate || '-'} | تاريخ الانتهاء: ${remaining.endDate || '-'}`;
 
                                                             return (
                                                                 <div className="flex items-center gap-1" title={tooltip}>
@@ -3114,7 +3114,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(remaining.text, `rem_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="Ù†Ø³Ø® Ø§Ù„Ù…Ø¯Ø© Ø§Ù„Ù…ØªØ¨Ù‚ÙŠØ©"
+                                                                        title="نسخ المدة المتبقية"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `rem_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
@@ -3122,41 +3122,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             );
                                                         })()}
                                                     </td>
-                                                    {/* Device Type (Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ: Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ) */}
+                                                    {/* Device Type (نوع الاشتراك: شخصي أم مشترك) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {isPersonalRecord ? (
                                                             <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-cyan-200 bg-cyan-50 px-2.5 py-1 text-[11px] font-black text-cyan-700 shadow-xs whitespace-nowrap dark:border-cyan-800/70 dark:bg-cyan-950/35 dark:text-cyan-300">
                                                                 <i className="fa-solid fa-mobile-screen-button text-[10px]"></i>
-                                                                <span>Ø¬Ù‡Ø§Ø²ÙŠÙ†</span>
+                                                                <span>جهازين</span>
                                                             </span>
                                                         ) : (
                                                             <span className="inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-black text-amber-700 shadow-xs whitespace-nowrap dark:border-amber-800/70 dark:bg-amber-950/35 dark:text-amber-300">
                                                                 <i className="fa-solid fa-mobile-screen text-[10px]"></i>
-                                                                <span>Ø¬Ù‡Ø§Ø²</span>
+                                                                <span>جهاز</span>
                                                             </span>
                                                         )}
                                                     </td>
-                                                    {/* Payment Status (Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹: Ù…Ø¯ÙÙˆØ¹ / ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹) */}
+                                                    {/* Payment Status (حالة الدفع: مدفوع / غير مدفوع) */}
                                                     <td className="px-1.5 py-1 font-medium">
-                                                        {rec.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' ? (
+                                                        {rec.paymentStatus === 'غير مدفوع' ? (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleTogglePaymentStatus(rec.id)}
                                                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/70 dark:border-rose-800/60 shadow-xs cursor-pointer hover:bg-rose-100 dark:hover:bg-rose-900/60 transition whitespace-nowrap"
-                                                                title="Ø§Ù†Ù‚Ø± Ù„ØªØºÙŠÙŠØ± Ø§Ù„Ø­Ø§Ù„Ø© Ø¥Ù„Ù‰ Ù…Ø¯ÙÙˆØ¹"
+                                                                title="انقر لتغيير الحالة إلى مدفوع"
                                                             >
                                                                 <i className="fa-solid fa-circle-xmark text-[8px] text-rose-500"></i>
-                                                                <span>ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹</span>
+                                                                <span>غير مدفوع</span>
                                                             </button>
                                                         ) : (
                                                             <button
                                                                 type="button"
                                                                 onClick={() => handleTogglePaymentStatus(rec.id)}
                                                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 shadow-xs cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/60 transition whitespace-nowrap"
-                                                                title="Ø§Ù†Ù‚Ø± Ù„ØªØºÙŠÙŠØ± Ø§Ù„Ø­Ø§Ù„Ø© Ø¥Ù„Ù‰ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹"
+                                                                title="انقر لتغيير الحالة إلى غير مدفوع"
                                                             >
                                                                 <i className="fa-solid fa-circle-check text-[8px] text-emerald-500"></i>
-                                                                <span>Ù…Ø¯ÙÙˆØ¹</span>
+                                                                <span>مدفوع</span>
                                                             </button>
                                                         )}
                                                     </td>
@@ -3177,7 +3177,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(effectiveDate, `acd_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="Ù†Ø³Ø® ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡"
+                                                                        title="نسخ تاريخ الإنشاء"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `acd_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
@@ -3197,10 +3197,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
                                                                         className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-black bg-emerald-600 text-white border border-emerald-600 hover:bg-emerald-700 transition whitespace-nowrap"
-                                                                        title={rec.offerActivatedAt ? `Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ± - ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶ ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : 'Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ±'}
+                                                                        title={rec.offerActivatedAt ? `لا يحتاج تذكير - تم تفعيل العرض ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : 'لا يحتاج تذكير'}
                                                                     >
                                                                         <i className="fa-solid fa-circle-check text-[8px]"></i>
-                                                                        <span>Ù„Ø§ ÙŠØ­ØªØ§Ø¬ ØªØ°ÙƒÙŠØ±</span>
+                                                                        <span>لا يحتاج تذكير</span>
                                                                     </button>
                                                                 );
                                                             }
@@ -3211,7 +3211,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             return (
                                                                 <div className="flex items-center gap-1">
                                                                     <span
-                                                                        title={`ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡: ${reminder.createdDate || effectiveDate || '-'} | Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±: ${reminder.targetDate || '-'} (${reminder.reminderDays || rec.reminderDays || '-'} ÙŠÙˆÙ…)`}
+                                                                        title={`تاريخ الإنشاء: ${reminder.createdDate || effectiveDate || '-'} | موعد التذكير: ${reminder.targetDate || '-'} (${reminder.reminderDays || rec.reminderDays || '-'} يوم)`}
                                                                         className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${
                                                                             reminder.status === 'expired'
                                                                                 ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60 shadow-xs'
@@ -3236,7 +3236,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <button
                                                                         onClick={() => handleCopy(reminder.text, `rem_acc_${rec.id}`)}
                                                                         className="text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 p-0.5 transition"
-                                                                        title="Ù†Ø³Ø® Ø­Ø§Ù„Ø© Ø§Ù„ØªØ°ÙƒÙŠØ±"
+                                                                        title="نسخ حالة التذكير"
                                                                     >
                                                                         <i className={`fa-solid ${copiedField === `rem_acc_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                     </button>
@@ -3248,10 +3248,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                                 ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                                                                 : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-emerald-400 hover:text-emerald-700'
                                                                         }`}
-                                                                        title={rec.offerActivated ? `ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'ØªØ¹Ù„ÙŠÙ… Ø£Ù† Ø¹Ø±Ø¶ Ø§Ù„ØªÙØ¹ÙŠÙ„ Ø§ØªØ¹Ù…Ù„ Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø³Ø§Ø¨'}
+                                                                        title={rec.offerActivated ? `تم تفعيل العرض${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'تعليم أن عرض التفعيل اتعمل على الحساب'}
                                                                     >
                                                                         <i className={`fa-solid ${rec.offerActivated ? 'fa-check' : 'fa-bolt'} text-[8px]`}></i>
-                                                                        <span>{rec.offerActivated ? 'Ø§Ù„Ø¹Ø±Ø¶ Ø§ØªÙØ¹Ù„' : 'ØªÙ… ØªÙØ¹ÙŠÙ„ Ø§Ù„Ø¹Ø±Ø¶'}</span>
+                                                                        <span>{rec.offerActivated ? 'العرض اتفعل' : 'تم تفعيل العرض'}</span>
                                                                     </button>
                                                                 </div>
                                                             );
@@ -3269,7 +3269,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             }
                                                             const currentUses = Math.max(0, Number(rec.currentUses || 0));
                                                             const maxUses = Math.max(1, Number(rec.maxUses || 2));
-                                                            // Ø§Ø´ØªÙ‚ Ø§Ù„Ø­Ø§Ù„Ø© Ø§Ù„ØµØ­ÙŠØ­Ø© â€” Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© Ù„Ù„Ù€ accountUsageStatus Ø§Ù„Ù…Ø­ÙÙˆØ¸
+                                                            // اشتق الحالة الصحيحة — الأولوية للـ accountUsageStatus المحفوظ
                                                             if (getAccountCategory(rec) === 'chatgpt_shared') {
                                                                 return (
                                                                     <div className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 p-0.5 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200">
@@ -3319,41 +3319,41 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 : remainingUses + ' devices available - reused';
                                                             return (
                                                                 <div className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-0.5 whitespace-nowrap">
-                                                                    {/* Ù…ØªØ§Ø­: 0/2 slots */}
+                                                                    {/* متاح: 0/2 slots */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, isReused && currentUses > 0 ? currentUses : 0, isReused && currentUses > 0 ? status : 'available')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass((status === 'available' || status === 'available_reused_after_expiry') || (isReused && remainingUses > 0), isReused ? 'reused' : 'green')}`}
-                                                                        title="Ø§Ù„Ø­Ø³Ø§Ø¨ Ù„Ù… ÙŠØ®Ø±Ø¬ Ù„Ø£ÙŠ Ø¹Ù…ÙŠÙ„ â€” 0/2 slots"
+                                                                        title="الحساب لم يخرج لأي عميل — 0/2 slots"
                                                                     >
                                                                         {isReused ? reusedAvailableLabel : 'Available'}
                                                                     </button>
-                                                                    {/* Ø´Ø®ØµÙŠ: Ø§Ù„Ø­Ø³Ø§Ø¨ ÙƒÙ„Ù‡ Ù„Ø´Ø®Øµ ÙˆØ§Ø­Ø¯ â€” 2/2 slots */}
+                                                                    {/* شخصي: الحساب كله لشخص واحد — 2/2 slots */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, maxUses, 'personal_full')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'personal_full', 'dark')}`}
-                                                                        title="Ø´Ø®ØµÙŠ â€” Ø§Ù„Ø­Ø³Ø§Ø¨ ÙƒÙ„Ù‡ Ù„Ø¹Ù…ÙŠÙ„ ÙˆØ§Ø­Ø¯ (2/2 slots)"
+                                                                        title="شخصي — الحساب كله لعميل واحد (2/2 slots)"
                                                                     >
-                                                                        Ø´Ø®ØµÙŠ
+                                                                        شخصي
                                                                     </button>
-                                                                    {/* Ù…Ø´ØªØ±Ùƒ Ø¬Ù‡Ø§Ø²: 1/2 slots Ù…Ø³ØªØ®Ø¯Ù… â€” slot ÙˆØ§Ø­Ø¯ Ù…ØªØ¨Ù‚ÙŠ */}
+                                                                    {/* مشترك جهاز: 1/2 slots مستخدم — slot واحد متبقي */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, 1, 'shared_one_device')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_one_device', 'amber')}`}
-                                                                        title="Ù…Ø´ØªØ±Ùƒ â€” Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯ Ø®Ø±Ø¬ØŒ slot ÙˆØ§Ø­Ø¯ Ù…ØªØ¨Ù‚ÙŠ (1/2 slots)"
+                                                                        title="مشترك — جهاز واحد خرج، slot واحد متبقي (1/2 slots)"
                                                                     >
-                                                                        Ù…Ø´ØªØ±Ùƒ Ø¬Ù‡Ø§Ø²
+                                                                        مشترك جهاز
                                                                     </button>
-                                                                    {/* Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„: 2/2 slots â€” Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ø®Ø±Ø¬ÙˆØ§ */}
+                                                                    {/* مشترك كامل: 2/2 slots — الجهازين خرجوا */}
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => handleSetAccountUsage(rec.id, maxUses, 'shared_full')}
                                                                         className={`px-1.5 py-0.5 rounded-md text-[9px] font-black border transition ${optionClass(status === 'shared_full', 'rose')}`}
-                                                                        title="Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„ â€” Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ø®Ø±Ø¬ÙˆØ§ (2/2 slots)"
+                                                                        title="مشترك كامل — الجهازين خرجوا (2/2 slots)"
                                                                     >
-                                                                        Ù…Ø´ØªØ±Ùƒ ÙƒØ§Ù…Ù„
+                                                                        مشترك كامل
                                                                     </button>
                                                                 </div>
                                                             );
@@ -3455,7 +3455,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.invoiceNumber, `inv_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-amber-600 p-0.5"
-                                                                    title="Ù†Ø³Ø® Ø±Ù‚Ù… Ø§Ù„ÙØ§ØªÙˆØ±Ø©"
+                                                                    title="نسخ رقم الفاتورة"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `inv_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3470,7 +3470,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         {rec.visa ? (
                                                             <div className="flex items-center gap-1 dir-ltr justify-end">
                                                                 <span className="font-mono text-slate-800 dark:text-slate-200 select-all text-[10.5px]">
-                                                                    {isVisaVisible ? rec.visa : 'â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ ' + rec.visa.slice(-4)}
+                                                                    {isVisaVisible ? rec.visa : '•••• •••• •••• ' + rec.visa.slice(-4)}
                                                                 </span>
                                                                 <button
                                                                     onClick={() => toggleSecret(rec.id, 'visa')}
@@ -3500,7 +3500,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.visaAccount, `va_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 p-0.5"
-                                                                    title="Ù†Ø³Ø® Ø­Ø³Ø§Ø¨ Ø§Ù„ÙÙŠØ²Ø§"
+                                                                    title="نسخ حساب الفيزا"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `va_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3510,7 +3510,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         )}
                                                     </td>
 
-                                                    {/* Account Data (Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨) */}
+                                                    {/* Account Data (بيانات الحساب) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {rec.selectedAccount ? (
                                                             <div className="flex items-center gap-1">
@@ -3521,7 +3521,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 <button
                                                                     onClick={() => handleCopy(rec.selectedAccount, `acc_c_${rec.id}`)}
                                                                     className="text-slate-400 hover:text-purple-600 dark:hover:text-purple-400 p-0.5 transition"
-                                                                    title="Ù†Ø³Ø® Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨"
+                                                                    title="نسخ بيانات الحساب"
                                                                 >
                                                                     <i className={`fa-solid ${copiedField === `acc_c_${rec.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[8px]`}></i>
                                                                 </button>
@@ -3540,16 +3540,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         <button
                                                             onClick={() => handleRestoreRecord(rec)}
                                                             className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
-                                                            title="Ø§Ø³ØªØ±Ø¯Ø§Ø¯ Ø§Ù„Ø³Ø¬Ù„ Ø¥Ù„Ù‰ Ø´ÙŠØªÙ‡ Ø§Ù„Ø£ØµÙ„ÙŠ"
+                                                            title="استرداد السجل إلى شيته الأصلي"
                                                         >
                                                             <i className="fa-solid fa-rotate-left text-[8px]"></i>
-                                                            <span>Ø§Ø³ØªØ±Ø¯Ø§Ø¯</span>
+                                                            <span>استرداد</span>
                                                         </button>
                                                         {canEmptyTrash && (
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="Ø­Ø°Ù Ù†Ù‡Ø§Ø¦ÙŠ"
+                                                                title="حذف نهائي"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
@@ -3561,7 +3561,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="ØªØ¹Ø¯ÙŠÙ„"
+                                                                title="تعديل"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -3570,13 +3570,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="Ø­Ø°Ù ÙˆÙ†Ù‚Ù„ Ø¥Ù„Ù‰ Ø³Ù„Ø© Ø§Ù„Ù…Ù‡Ù…Ù„Ø§Øª"
+                                                                title="حذف ونقل إلى سلة المهملات"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
                                                         )}
                                                         {!canEdit && !canDelete && (
-                                                            <span className="text-[9px] text-slate-400">Ø¹Ø±Ø¶ ÙÙ‚Ø·</span>
+                                                            <span className="text-[9px] text-slate-400">عرض فقط</span>
                                                         )}
                                                     </div>
                                                 )}
@@ -3593,7 +3593,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 {pageSize !== 'all' && totalPages > 1 && (
                     <div className="p-4 bg-slate-50/80 dark:bg-slate-800/80 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                         <span className="text-slate-500 dark:text-slate-400">
-                            Ø¹Ø±Ø¶ Ø§Ù„ØµÙØ­Ø© <b className="text-slate-800 dark:text-white">{currentPage}</b> Ù…Ù† Ø£ØµÙ„ <b className="text-slate-800 dark:text-white">{totalPages}</b> (Ø¥Ø¬Ù…Ø§Ù„ÙŠ {filteredRecords.length} Ø³Ø¬Ù„)
+                            عرض الصفحة <b className="text-slate-800 dark:text-white">{currentPage}</b> من أصل <b className="text-slate-800 dark:text-white">{totalPages}</b> (إجمالي {filteredRecords.length} سجل)
                         </span>
 
                         <div className="flex items-center gap-1.5">
@@ -3609,14 +3609,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 disabled={currentPage === 1}
                                 className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
                             >
-                                Ø§Ù„Ø³Ø§Ø¨Ù‚
+                                السابق
                             </button>
                             <button
                                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                                 disabled={currentPage === totalPages}
                                 className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-850 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 font-bold"
                             >
-                                Ø§Ù„ØªØ§Ù„ÙŠ
+                                التالي
                             </button>
                             <button
                                 onClick={() => setCurrentPage(totalPages)}
@@ -3642,18 +3642,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                                 <div>
                                     <h3 className="font-black text-lg text-slate-800 dark:text-white leading-tight">
-                                        {editingRecord ? 'ØªØ¹Ø¯ÙŠÙ„ Ø§Ù„Ø³Ø¬Ù„' : 'Ø¥Ø¶Ø§ÙØ© Ø¨ÙŠØ§Ù† Ø¬Ø¯ÙŠØ¯'}
+                                        {editingRecord ? 'تعديل السجل' : 'إضافة بيان جديد'}
                                     </h3>
                                     <p className="text-xs text-slate-400">
-                                        Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø­Ø§Ù„ÙŠ: <span className="font-bold text-indigo-600 dark:text-indigo-400">{currentSheet.name}</span>
+                                        الشيت الحالي: <span className="font-bold text-indigo-600 dark:text-indigo-400">{currentSheet.name}</span>
                                     </p>
                                 </div>
                             </div>
-                            {/* Prominent Cancel / Close Button (Ø¹Ù„Ø§Ù…Ø© Ø§Ù„Ø¥Ù„ØºØ§Ø¡) */}
+                            {/* Prominent Cancel / Close Button (علامة الإلغاء) */}
                             <button
                                 type="button"
                                 onClick={() => setShowAddModal(false)}
-                                title="Ø¥Ù„ØºØ§Ø¡ ÙˆØ¥ØºÙ„Ø§Ù‚ Ø§Ù„Ù†Ø§ÙØ°Ø©"
+                                title="إلغاء وإغلاق النافذة"
                                 className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 flex items-center justify-center transition border border-slate-200/60 dark:border-slate-700/60 hover:border-rose-300 dark:hover:border-rose-800/80 shadow-xs cursor-pointer group"
                             >
                                 <i className="fa-solid fa-xmark text-base group-hover:scale-110 transition-transform"></i>
@@ -3676,7 +3676,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             }`}
                                         >
                                             <i className="fa-solid fa-box-open text-[11px]"></i>
-                                            <span>Ø§Ø®ØªÙŠØ§Ø± Ù…Ù† Ø§Ù„Ù…ØªØ§Ø­</span>
+                                            <span>اختيار من المتاح</span>
                                         </button>
                                         <button
                                             type="button"
@@ -3691,7 +3691,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             }`}
                                         >
                                             <i className="fa-solid fa-keyboard text-[11px]"></i>
-                                            <span>ØªØ³Ø¬ÙŠÙ„ ÙŠØ¯ÙˆÙŠ</span>
+                                            <span>تسجيل يدوي</span>
                                         </button>
                                     </div>
 
@@ -3699,10 +3699,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div className="space-y-2">
                                             <div className="flex items-center justify-between gap-2">
                                                 <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                    Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ Ù…Ù† Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø­Ø³Ø§Ø¨
+                                                    الميل المتباع من بيانات الحساب
                                                 </label>
                                                 <span className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                    Ø§Ù„Ù…Ø¹Ø±ÙˆØ¶: {displayedAvailableAccountChoices.length} / {availableAccountChoices.length}
+                                                    المعروض: {displayedAvailableAccountChoices.length} / {availableAccountChoices.length}
                                                 </span>
                                             </div>
                                             <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
@@ -3712,7 +3712,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         type="text"
                                                         value={availableAccountSearch}
                                                         onChange={(e) => setAvailableAccountSearch(e.target.value)}
-                                                        placeholder="Ø¨Ø­Ø« ÙÙŠ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ø§Ù„Ù…ØªØ§Ø­Ø©..."
+                                                        placeholder="بحث في الإيميلات المتاحة..."
                                                         className="w-full rounded-xl border-2 border-slate-200 bg-white py-2 pr-8 pl-3 text-xs font-bold text-slate-800 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                                                     />
                                                 </div>
@@ -3720,11 +3720,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     value={availableAccountSort}
                                                     onChange={(e) => setAvailableAccountSort(e.target.value)}
                                                     className="rounded-xl border-2 border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 outline-none transition focus:border-purple-400 focus:ring-2 focus:ring-purple-500/15 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-                                                    title="ØªØ±ØªÙŠØ¨ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª"
+                                                    title="ترتيب الإيميلات"
                                                 >
-                                                    <option value="newest">Ø§Ù„Ø£Ø­Ø¯Ø« Ø¨ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</option>
-                                                    <option value="oldest">Ø§Ù„Ø£Ù‚Ø¯Ù… Ø¨ØªØ§Ø±ÙŠØ® Ø§Ù„Ø¥Ù†Ø´Ø§Ø¡</option>
-                                                    <option value="email">Ø­Ø³Ø¨ Ø§Ù„Ø¥ÙŠÙ…ÙŠÙ„</option>
+                                                    <option value="newest">الأحدث بتاريخ الإنشاء</option>
+                                                    <option value="oldest">الأقدم بتاريخ الإنشاء</option>
+                                                    <option value="email">حسب الإيميل</option>
                                                 </select>
                                             </div>
                                             {displayedAvailableAccountChoices.length > 0 ? (
@@ -3735,12 +3735,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         const remaining = Math.max(0, maxUses - currentUses);
                                                         const accountEmail = acc.email || acc.selectedAccount || '';
                                                         const isFull = currentUses === 0;
-                                                        const isPersonalChosen = formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†';
+                                                        const isPersonalChosen = formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين';
                                                         const disabledForPersonal = isPersonalChosen && !isFull;
                                                         const selectedValue = String(formData.selectedAccount || '').toLowerCase();
                                                         const isSelected = selectedValue
                                                             && [acc.id, acc.email, acc.selectedAccount].some(value => String(value || '').toLowerCase() === selectedValue);
-                                                        const availabilityLabel = isFull && maxUses >= 2 ? 'Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù…ØªØ§Ø­ÙŠÙ†' : `Ù…ØªØ¨Ù‚ÙŠ ${remaining} Ø¬Ù‡Ø§Ø²`;
+                                                        const availabilityLabel = isFull && maxUses >= 2 ? 'جهازين متاحين' : `متبقي ${remaining} جهاز`;
                                                         const availabilityHint = isFull && maxUses >= 2 ? 'Personal or shared available' : 'Shared only';
                                                         const isReusedAfterExpiry = isReusedAccount(acc);
 
@@ -3765,7 +3765,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         <div dir="ltr" className={`font-mono text-xs font-black truncate text-left ${
                                                                             isSelected ? 'text-white' : 'text-slate-800 dark:text-slate-100'
                                                                         }`}>
-                                                                            {accountEmail || 'Ø­Ø³Ø§Ø¨ Ø¨Ø¯ÙˆÙ† Ù…ÙŠÙ„'}
+                                                                            {accountEmail || 'حساب بدون ميل'}
                                                                         </div>
                                                                         <div className={`mt-1 text-[11px] font-bold ${
                                                                             isSelected ? 'text-indigo-100' : 'text-slate-500 dark:text-slate-400'
@@ -3800,7 +3800,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                                 ? 'bg-white/15 text-white'
                                                                                 : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300'
                                                                         }`}>
-                                                                            Ù…Ø³ØªØ®Ø¯Ù… {currentUses}/{maxUses}
+                                                                            مستخدم {currentUses}/{maxUses}
                                                                         </span>
                                                                     </div>
                                                                 </div>
@@ -3812,20 +3812,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/50 px-4 py-5 text-center">
                                                     <i className="fa-solid fa-inbox text-slate-300 dark:text-slate-600 text-xl mb-2"></i>
                                                     <div className="text-xs font-black text-slate-500 dark:text-slate-400">
-                                                        {availableAccountSearch ? 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ù†ØªØ§Ø¦Ø¬ Ù…Ø·Ø§Ø¨Ù‚Ø© Ù„Ù„Ø¨Ø­Ø«' : 'Ù„Ø§ ØªÙˆØ¬Ø¯ Ø¥ÙŠÙ…ÙŠÙ„Ø§Øª Ù…ØªØ§Ø­Ø© Ø­Ø§Ù„ÙŠØ§'}
+                                                        {availableAccountSearch ? 'لا توجد نتائج مطابقة للبحث' : 'لا توجد إيميلات متاحة حاليا'}
                                                     </div>
                                                 </div>
                                             )}
                                             <p className="text-[11px] text-slate-500 dark:text-slate-400 font-bold">
-                                                {formData.deviceType === 'Ø´Ø®ØµÙŠ'
-                                                    ? 'ðŸŸ¢ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ø´Ø®ØµÙŠ ÙŠØªØ·Ù„Ø¨ Ø­Ø³Ø§Ø¨Ø§Ù‹ Ù…ØªØ§Ø­Ø§Ù‹ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ (Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù…Ø¹Ø§Ù‹ Ù„Ù… ÙŠØªÙ… Ø§Ø³ØªØ®Ø¯Ø§Ù… Ø£ÙŠ Ù…Ù†Ù‡Ù…Ø§).'
-                                                    : 'ðŸŸ£ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ Ø§Ù„Ù…Ø´ØªØ±Ùƒ ÙŠÙ…ÙƒÙ† ØªØ³ÙƒÙŠÙ†Ù‡ Ø¹Ù„Ù‰ Ø­Ø³Ø§Ø¨ Ù…ØªØ§Ø­ Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ø£Ùˆ Ø­Ø³Ø§Ø¨ Ù…Ø´ØªØ±Ùƒ Ù…ØªØ¨Ù‚ÙŠ ÙÙŠÙ‡ Ø¬Ù‡Ø§Ø².'}
+                                                {formData.deviceType === 'شخصي'
+                                                    ? '🟢 الاشتراك الشخصي يتطلب حساباً متاحاً بالكامل (الجهازين معاً لم يتم استخدام أي منهما).'
+                                                    : '🟣 الاشتراك المشترك يمكن تسكينه على حساب متاح بالكامل أو حساب مشترك متبقي فيه جهاز.'}
                                             </p>
                                         </div>
                                     ) : (
                                         <div className="space-y-1.5">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ ÙŠØ¯ÙˆÙŠÙ‹Ø§
+                                                الميل المتباع يدويًا
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-pen absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3833,7 +3833,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.selectedAccount}
                                                     onChange={(e) => setFormData({ ...formData, selectedAccount: e.target.value })}
-                                                    placeholder="Ø§ÙƒØªØ¨ Ø§Ù„Ù…ÙŠÙ„ Ø§Ù„Ù…ØªØ¨Ø§Ø¹ ÙŠØ¯ÙˆÙŠÙ‹Ø§..."
+                                                    placeholder="اكتب الميل المتباع يدويًا..."
                                                     className="w-full bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 hover:border-slate-400 focus:border-slate-600 rounded-xl pr-9 pl-4 py-2.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-slate-500/20 dir-ltr text-right"
                                                 />
                                             </div>
@@ -3845,14 +3845,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 space-y-3">
                                     <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-black text-xs">
                                         <i className="fa-solid fa-address-card text-indigo-500"></i>
-                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„Ø¹Ù…ÙŠÙ„ ÙˆØ§Ù„ØªÙˆØ§ØµÙ„</span>
-                                        <span className="text-[10px] font-bold text-slate-400">Ø§Ø®ØªÙŠØ§Ø±ÙŠ</span>
+                                        <span>بيانات العميل والتواصل</span>
+                                        <span className="text-[10px] font-bold text-slate-400">اختياري</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„
+                                                اسم العميل
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-user absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3860,7 +3860,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.name}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                                    placeholder="Ø§Ø³Ù… Ø§Ù„Ø¹Ù…ÙŠÙ„ Ø¥Ù† ÙˆØ¬Ø¯"
+                                                    placeholder="اسم العميل إن وجد"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -3868,7 +3868,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                Ø±Ù‚Ù… Ø§Ù„Ù‡Ø§ØªÙ Ø£Ùˆ ÙŠÙˆØ²Ø± ÙˆØ§ØªØ³Ø§Ø¨
+                                                رقم الهاتف أو يوزر واتساب
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-phone absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -3876,7 +3876,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.phone}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                                                    placeholder="010... Ø£Ùˆ username"
+                                                    placeholder="010... أو username"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -3885,10 +3885,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                            ÙˆØ³ÙŠÙ„Ø© Ø§Ù„ØªÙˆØ§ØµÙ„
+                                            وسيلة التواصل
                                         </label>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {['ÙˆØ§ØªØ³Ø§Ø¨', 'Ù…Ø§Ø³Ù†Ø¬Ø±'].map(channel => (
+                                            {['واتساب', 'ماسنجر'].map(channel => (
                                                 <button
                                                     key={channel}
                                                     type="button"
@@ -3899,7 +3899,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
                                                     }`}
                                                 >
-                                                    <i className={`fa-brands ${channel === 'ÙˆØ§ØªØ³Ø§Ø¨' ? 'fa-whatsapp' : 'fa-facebook-messenger'} text-sm`}></i>
+                                                    <i className={`fa-brands ${channel === 'واتساب' ? 'fa-whatsapp' : 'fa-facebook-messenger'} text-sm`}></i>
                                                     <span>{channel}</span>
                                                 </button>
                                             ))}
@@ -3912,7 +3912,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Reminder Title */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                                            Ø¹Ù†ÙˆØ§Ù† Ø§Ù„ØªØ°ÙƒÙŠØ± Ø£Ùˆ Ø§Ù„Ù…Ø·Ù„ÙˆØ¨ ØªØ°ÙƒÙŠØ±Ù‡ <span className="text-rose-500">*</span>
+                                            عنوان التذكير أو المطلوب تذكيره <span className="text-rose-500">*</span>
                                         </label>
                                         <div className="relative">
                                             <i className="fa-solid fa-bell absolute right-3.5 top-1/2 -translate-y-1/2 text-amber-500 text-xs"></i>
@@ -3921,7 +3921,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 required
                                                 value={formData.email}
                                                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                                placeholder="Ù…Ø«Ø§Ù„: ØªØ¬Ø¯ÙŠØ¯ Ø§Ø´ØªØ±Ø§Ùƒ Ø£Ø¯ÙˆØ¨ÙŠ Ù„Ø¹Ù…ÙŠÙ„ØŒ Ø³Ø¯Ø§Ø¯ ÙÙŠØ²Ø§ØŒ Ø§ØªØµØ§Ù„ Ù‡Ø§ØªÙÙŠ..."
+                                                placeholder="مثال: تجديد اشتراك أدوبي لعميل، سداد فيزا، اتصال هاتفي..."
                                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-500/50 font-bold"
                                             />
                                         </div>
@@ -3930,18 +3930,18 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Priority / Category */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 mb-1.5">
-                                            Ø§Ù„Ø£ÙˆÙ„ÙˆÙŠØ© ÙˆØ§Ù„ØªØµÙ†ÙŠÙ
+                                            الأولوية والتصنيف
                                         </label>
                                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                             {[
-                                                { id: 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹', label: 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹' },
-                                                { id: 'ðŸŸ¡ Ø£ÙˆÙ„ÙˆÙŠØ© Ù…ØªÙˆØ³Ø·Ø©', label: 'ðŸŸ¡ Ø£ÙˆÙ„ÙˆÙŠØ© Ù…ØªÙˆØ³Ø·Ø©' },
-                                                { id: 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ', label: 'ðŸŸ¢ Ø¹Ø§Ø¯ÙŠ' },
-                                                { id: 'ðŸŸ£ ØªØ¬Ø¯ÙŠØ¯ ÙˆØ§Ø´ØªØ±Ø§Ùƒ', label: 'ðŸŸ£ ØªØ¬Ø¯ÙŠØ¯ ÙˆØ§Ø´ØªØ±Ø§Ùƒ' },
-                                                { id: 'ðŸ”µ Ù…ØªØ§Ø¨Ø¹Ø© Ø¹Ù…ÙŠÙ„', label: 'ðŸ”µ Ù…ØªØ§Ø¨Ø¹Ø© Ø¹Ù…ÙŠÙ„' },
-                                                { id: 'ðŸŸ  Ø³Ø¯Ø§Ø¯ Ù…Ø§Ù„ÙŠ / Ø¯ÙØ¹', label: 'ðŸŸ  Ø³Ø¯Ø§Ø¯ Ù…Ø§Ù„ÙŠ / Ø¯ÙØ¹' },
+                                                { id: '🔴 عاجل جداً', label: '🔴 عاجل جداً' },
+                                                { id: '🟡 أولوية متوسطة', label: '🟡 أولوية متوسطة' },
+                                                { id: '🟢 عادي', label: '🟢 عادي' },
+                                                { id: '🟣 تجديد واشتراك', label: '🟣 تجديد واشتراك' },
+                                                { id: '🔵 متابعة عميل', label: '🔵 متابعة عميل' },
+                                                { id: '🟠 سداد مالي / دفع', label: '🟠 سداد مالي / دفع' },
                                             ].map(opt => {
-                                                const currentVal = formData.password || 'ðŸ”´ Ø¹Ø§Ø¬Ù„ Ø¬Ø¯Ø§Ù‹';
+                                                const currentVal = formData.password || '🔴 عاجل جداً';
                                                 const isSel = currentVal === opt.id || currentVal.includes(opt.id.slice(2, 6));
                                                 return (
                                                     <button
@@ -3966,7 +3966,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div className="flex items-center justify-between">
                                             <label className="text-xs font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
                                                 <i className="fa-regular fa-calendar-check text-amber-600 text-sm"></i>
-                                                <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ± Ø§Ù„Ù…Ø­Ø¯Ø¯ (Ø§Ù„ÙŠÙˆÙ… Ø§Ù„Ù…Ø³ØªÙ‡Ø¯Ù)</span>
+                                                <span>موعد التذكير المحدد (اليوم المستهدف)</span>
                                             </label>
                                             <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
                                                 {(() => {
@@ -3986,14 +3986,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         {/* Quick Date Chips */}
                                         <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                            <span className="text-[10.5px] text-slate-500 font-bold ml-1">ØªØ­Ø¯ÙŠØ¯ Ø³Ø±ÙŠØ¹:</span>
+                                            <span className="text-[10.5px] text-slate-500 font-bold ml-1">تحديد سريع:</span>
                                             {[
-                                                { label: 'Ø§Ù„ÙŠÙˆÙ…', daysToAdd: 0 },
-                                                { label: 'ØºØ¯Ø§Ù‹', daysToAdd: 1 },
-                                                { label: 'Ø¨Ø¹Ø¯ 3 Ø£ÙŠØ§Ù…', daysToAdd: 3 },
-                                                { label: 'Ø¨Ø¹Ø¯ Ø£Ø³Ø¨ÙˆØ¹', daysToAdd: 7 },
-                                                { label: 'Ø¨Ø¹Ø¯ Ø£Ø³Ø¨ÙˆØ¹ÙŠÙ†', daysToAdd: 14 },
-                                                { label: 'Ø¨Ø¹Ø¯ Ø´Ù‡Ø± (30 ÙŠÙˆÙ…)', daysToAdd: 30 },
+                                                { label: 'اليوم', daysToAdd: 0 },
+                                                { label: 'غداً', daysToAdd: 1 },
+                                                { label: 'بعد 3 أيام', daysToAdd: 3 },
+                                                { label: 'بعد أسبوع', daysToAdd: 7 },
+                                                { label: 'بعد أسبوعين', daysToAdd: 14 },
+                                                { label: 'بعد شهر (30 يوم)', daysToAdd: 30 },
                                             ].map(chip => {
                                                 const d = new Date();
                                                 d.setDate(d.getDate() + chip.daysToAdd);
@@ -4022,7 +4022,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {/* Email */}
                                     <div>
                                         <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                            Ø§Ù„Ø¨Ø±ÙŠØ¯ Ø§Ù„Ø¥Ù„ÙƒØªØ±ÙˆÙ†ÙŠ (Email)
+                                            البريد الإلكتروني (Email)
                                         </label>
                                         <div className="relative">
                                             <i className="fa-solid fa-envelope absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4042,7 +4042,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                                                 {currentSheetId === 'account_data' && ((formData.accountCategory || activeAccountCategory) === 'capcut' || (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared')
                                                     ? 'Password'
-                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 1 (Password)'}
+                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Outlook Password' : 'كلمة المرور 1 (Password)'}
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-lock absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4054,7 +4054,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         ? 'CapCut password'
                                                         : currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
                                                         ? 'ChatGPT password'
-                                                        : currentSheetId === 'account_data' ? 'Outlook password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± Ø§Ù„Ø±Ø¦ÙŠØ³ÙŠØ©'}
+                                                        : currentSheetId === 'account_data' ? 'Outlook password' : 'كلمة المرور الرئيسية'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
                                             </div>
@@ -4065,7 +4065,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
                                                 {currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
                                                     ? 'ChatGPT Password'
-                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'ÙƒÙ„Ù…Ø© Ø§Ù„Ù…Ø±ÙˆØ± 2 (Password 2)'}
+                                                    : (isClientOrMerchant || currentSheetId === 'account_data') ? 'Adobe Password' : 'كلمة المرور 2 (Password 2)'}
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-key absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4075,7 +4075,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     onChange={(e) => setFormData(prev => ({ ...prev, password2: e.target.value }))}
                                                     placeholder={currentSheetId === 'account_data' && (formData.accountCategory || activeAccountCategory) === 'chatgpt_shared'
                                                         ? 'ChatGPT password'
-                                                        : currentSheetId === 'account_data' ? 'Adobe password' : 'ÙƒÙ„Ù…Ø© Ù…Ø±ÙˆØ± Ø¨Ø¯ÙŠÙ„Ø© / ÙƒÙˆØ¯ Ø¥Ø¶Ø§ÙÙŠ'}
+                                                        : currentSheetId === 'account_data' ? 'Adobe password' : 'كلمة مرور بديلة / كود إضافي'}
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dir-ltr text-right"
                                                 />
                                             </div>
@@ -4093,7 +4093,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
+                                                مدة الاشتراك
                                             </label>
                                             <span className="text-[11px] text-slate-400">
                                                 (Subscription Duration)
@@ -4119,7 +4119,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {/* Label + Calendar Icon on Right */}
                                                 <div className="flex items-center gap-2">
                                                     <span className={`text-xs font-bold ${formData.duration ? 'text-slate-800 dark:text-slate-100' : 'text-slate-700 dark:text-slate-300'}`}>
-                                                        {formData.duration || 'Ø§Ø®ØªØ± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ'}
+                                                        {formData.duration || 'اختر مدة الاشتراك'}
                                                     </span>
                                                     <CalendarOptionIcon
                                                         num={formData.duration ? parseInt(formData.duration) : null}
@@ -4144,7 +4144,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
                                                         }`}
                                                     >
-                                                        <span>Ø§Ø®ØªØ± Ù…Ø¯Ø© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Ù…Ù† Ø´Ù‡Ø± Ø¥Ù„Ù‰ 4 Ø´Ù‡ÙˆØ±)</span>
+                                                        <span>اختر مدة الاشتراك (من شهر إلى 4 شهور)</span>
                                                         <CalendarOptionIcon num={null} isSelected={!formData.duration} />
                                                     </button>
 
@@ -4175,19 +4175,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         </div>
                                     </div>
 
-                                    {/* Start Date (ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ) */}
+                                    {/* Start Date (تاريخ بداية الاشتراك) */}
                                     <div className="space-y-1.5">
                                         <div className="flex items-center justify-between">
                                             <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                                ØªØ§Ø±ÙŠØ® Ø¨Ø¯Ø§ÙŠØ© Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ
+                                                تاريخ بداية الاشتراك
                                             </label>
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData(prev => ({ ...prev, startDate: new Date().toISOString().slice(0, 10) }))}
                                                 className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline font-bold"
-                                                title="ØªØ¹ÙŠÙŠÙ† Ù„ØªØ§Ø±ÙŠØ® Ø§Ù„ÙŠÙˆÙ…"
+                                                title="تعيين لتاريخ اليوم"
                                             >
-                                                Ø§Ù„ÙŠÙˆÙ…
+                                                اليوم
                                             </button>
                                         </div>
 
@@ -4202,87 +4202,87 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </div>
                                 </div>
 
-                                {/* Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ: Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ */}
+                                {/* نوع الاشتراك: شخصي أم مشترك */}
                                 <div className="space-y-1.5 pt-1">
                                     <div className="flex items-center justify-between">
                                         <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                            Ù†ÙˆØ¹ Ø§Ù„Ø§Ø´ØªØ±Ø§Ùƒ (Ø´Ø®ØµÙŠ Ø£Ù… Ù…Ø´ØªØ±Ùƒ)
+                                            نوع الاشتراك (شخصي أم مشترك)
                                         </label>
                                         <span className={`text-[10px] font-black px-2.5 py-1 rounded-full ${
-                                            (formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
+                                            (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
                                                 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 ring-1 ring-emerald-500/30'
                                                 : 'bg-purple-100 text-purple-800 dark:bg-purple-950/60 dark:text-purple-300 ring-1 ring-purple-500/30'
                                         }`}>
-                                            {(formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†') ? 'ðŸŸ¢ Ø´Ø®ØµÙŠ â€” ÙŠØ®ØµÙ… Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ†' : 'ðŸŸ£ Ù…Ø´ØªØ±Ùƒ â€” ÙŠØ®ØµÙ… Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯'}
+                                            {(formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين') ? '🟢 شخصي — يخصم الجهازين' : '🟣 مشترك — يخصم جهاز واحد'}
                                         </span>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2.5">
-                                        {/* Ø´Ø®ØµÙŠ */}
+                                        {/* شخصي */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('Ø´Ø®ØµÙŠ')}
+                                            onClick={() => handleSetDeviceType('شخصي')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                (formData.deviceType === 'Ø´Ø®ØµÙŠ' || formData.deviceType === 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
+                                                (formData.deviceType === 'شخصي' || formData.deviceType === 'جهازين')
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
                                                 <i className="fa-solid fa-user-shield text-base text-emerald-500"></i>
-                                                <span className="text-sm font-black">Ø´Ø®ØµÙŠ</span>
+                                                <span className="text-sm font-black">شخصي</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Ø§Ù„Ø¬Ù‡Ø§Ø²ÙŠÙ† Ù„Ù„Ø¹Ù…ÙŠÙ„ (2 slots)</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">الجهازين للعميل (2 slots)</span>
                                         </button>
 
-                                        {/* Ù…Ø´ØªØ±Ùƒ */}
+                                        {/* مشترك */}
                                         <button
                                             type="button"
-                                            onClick={() => handleSetDeviceType('Ù…Ø´ØªØ±Ùƒ')}
+                                            onClick={() => handleSetDeviceType('مشترك')}
                                             className={`py-3 px-3 rounded-2xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1.5 transition select-none cursor-pointer ${
-                                                (formData.deviceType !== 'Ø´Ø®ØµÙŠ' && formData.deviceType !== 'Ø¬Ù‡Ø§Ø²ÙŠÙ†')
+                                                (formData.deviceType !== 'شخصي' && formData.deviceType !== 'جهازين')
                                                     ? 'border-purple-500 bg-purple-500/10 text-purple-600 dark:text-purple-400 shadow-sm ring-2 ring-purple-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <div className="flex items-center gap-1.5">
                                                 <i className="fa-solid fa-laptop text-base text-purple-500"></i>
-                                                <span className="text-sm font-black">Ù…Ø´ØªØ±Ùƒ</span>
+                                                <span className="text-sm font-black">مشترك</span>
                                             </div>
-                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">Ø¬Ù‡Ø§Ø² ÙˆØ§Ø­Ø¯ Ù„Ù„Ø¹Ù…ÙŠÙ„ (1 slot)</span>
+                                            <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">جهاز واحد للعميل (1 slot)</span>
                                         </button>
                                     </div>
                                 </div>
 
-                                {/* Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹: Ù…Ø¯ÙÙˆØ¹ ÙˆÙ„Ø§ ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹ */}
+                                {/* حالة الدفع: مدفوع ولا غير مدفوع */}
                                 <div className="space-y-1.5 pt-1">
                                     <label className="block text-xs font-bold text-slate-800 dark:text-slate-200">
-                                        Ø­Ø§Ù„Ø© Ø§Ù„Ø¯ÙØ¹
+                                        حالة الدفع
                                     </label>
                                     <div className="grid grid-cols-2 gap-3">
                                         <button
                                             type="button"
-                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'Ù…Ø¯ÙÙˆØ¹' }))}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'مدفوع' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.paymentStatus === 'Ù…Ø¯ÙÙˆØ¹' || !formData.paymentStatus
+                                                formData.paymentStatus === 'مدفوع' || !formData.paymentStatus
                                                     ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shadow-sm ring-2 ring-emerald-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <i className="fa-solid fa-circle-check text-base text-emerald-500"></i>
-                                            <span className="text-sm">Ù…Ø¯ÙÙˆØ¹</span>
+                                            <span className="text-sm">مدفوع</span>
                                         </button>
 
                                         <button
                                             type="button"
-                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹' }))}
+                                            onClick={() => setFormData(prev => ({ ...prev, paymentStatus: 'غير مدفوع' }))}
                                             className={`py-2.5 px-4 rounded-2xl border-2 text-xs font-bold flex items-center justify-center gap-2.5 transition select-none cursor-pointer ${
-                                                formData.paymentStatus === 'ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹'
+                                                formData.paymentStatus === 'غير مدفوع'
                                                     ? 'border-rose-500 bg-rose-500/10 text-rose-600 dark:text-rose-400 shadow-sm ring-2 ring-rose-500/20'
                                                     : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600 text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-850'
                                             }`}
                                         >
                                             <i className="fa-solid fa-circle-xmark text-base text-rose-500"></i>
-                                            <span className="text-sm">ØºÙŠØ± Ù…Ø¯ÙÙˆØ¹</span>
+                                            <span className="text-sm">غير مدفوع</span>
                                         </button>
                                     </div>
                                 </div>
@@ -4295,7 +4295,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <div className="p-3.5 bg-slate-50/80 dark:bg-slate-850 rounded-2xl border border-slate-200 dark:border-slate-700 space-y-3">
                                     <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200 font-bold text-xs">
                                         <i className="fa-solid fa-layer-group text-sm text-indigo-500"></i>
-                                        <span>Ù†ÙˆØ¹ Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                        <span>نوع الحساب</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -4354,7 +4354,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     {(formData.accountCategory || activeAccountCategory) === 'chatgpt_shared' && (
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Ø¹Ø¯Ø¯ Ø§Ù„Ø£Ø´Ø®Ø§Øµ Ø¹Ù„Ù‰ Ø§Ù„Ø­Ø³Ø§Ø¨</label>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">عدد الأشخاص على الحساب</label>
                                                 <input
                                                     type="number"
                                                     min="1"
@@ -4364,7 +4364,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">Ù…ÙŠØ¹Ø§Ø¯ Ø§Ù„ØªØ¬Ø¯ÙŠØ¯</label>
+                                                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">ميعاد التجديد</label>
                                                 <input
                                                     type="date"
                                                     value={formData.accountCreatedDate || new Date().toISOString().slice(0, 10)}
@@ -4392,7 +4392,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <div className="p-3.5 bg-purple-50/60 dark:bg-purple-950/30 rounded-2xl border border-purple-200/70 dark:border-purple-800/50 space-y-3">
                                     <div className="flex items-center gap-2 text-purple-700 dark:text-purple-300 font-bold text-xs">
                                         <i className="fa-solid fa-clock-rotate-left text-sm"></i>
-                                        <span>Ø¨ÙŠØ§Ù†Ø§Øª Ø§Ù„ØªØ°ÙƒÙŠØ± ÙˆØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨</span>
+                                        <span>بيانات التذكير وتاريخ إنشاء الحساب</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -4400,14 +4400,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         <div>
                                             <div className="flex items-center justify-between mb-1.5">
                                                 <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                                    ØªØ§Ø±ÙŠØ® Ø¥Ù†Ø´Ø§Ø¡ Ø§Ù„Ø­Ø³Ø§Ø¨
+                                                    تاريخ إنشاء الحساب
                                                 </label>
                                                 <button
                                                     type="button"
                                                     onClick={() => setFormData({ ...formData, accountCreatedDate: new Date().toISOString().slice(0, 10) })}
                                                     className="text-[10px] font-bold text-purple-600 hover:text-purple-700 dark:text-purple-400 bg-purple-100/80 dark:bg-purple-900/60 px-2 py-0.5 rounded-md transition"
                                                 >
-                                                    Ø§Ù„ÙŠÙˆÙ…
+                                                    اليوم
                                                 </button>
                                             </div>
                                             <div className="relative">
@@ -4423,7 +4423,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         {/* Reminder Days */}
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                ÙØªØ±Ø© Ø§Ù„ØªØ°ÙƒÙŠØ± (Ø¹Ø¯Ø¯ Ø§Ù„Ø£ÙŠØ§Ù…)
+                                                فترة التذكير (عدد الأيام)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-bell absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4433,7 +4433,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     max="3650"
                                                     value={formData.reminderDays}
                                                     onChange={(e) => setFormData({ ...formData, reminderDays: e.target.value })}
-                                                    placeholder="Ù…Ø«Ø§Ù„: 20"
+                                                    placeholder="مثال: 20"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
                                                 />
                                             </div>
@@ -4442,7 +4442,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                     {/* Quick chips for reminder days */}
                                     <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                                        <span className="text-[10.5px] text-slate-400 font-bold ml-1">Ø®ÙŠØ§Ø±Ø§Øª Ø³Ø±ÙŠØ¹Ø©:</span>
+                                        <span className="text-[10.5px] text-slate-400 font-bold ml-1">خيارات سريعة:</span>
                                         {[15, 20, 30, 45, 60].map(days => (
                                             <button
                                                 key={days}
@@ -4454,7 +4454,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-purple-50 dark:hover:bg-slate-750'
                                                 }`}
                                             >
-                                                {days} ÙŠÙˆÙ…
+                                                {days} يوم
                                             </button>
                                         ))}
                                     </div>
@@ -4467,7 +4467,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <div className="mt-1.5 p-2 rounded-xl bg-purple-100/70 dark:bg-purple-900/40 border border-purple-200/90 dark:border-purple-800/70 flex items-center justify-between text-xs text-purple-950 dark:text-purple-200">
                                                 <div className="flex items-center gap-2">
                                                     <i className="fa-solid fa-calendar-check text-purple-600 dark:text-purple-400"></i>
-                                                    <span>Ù…ÙˆØ¹Ø¯ Ø§Ù„ØªØ°ÙƒÙŠØ±: <strong>{reminderPreview.targetDate}</strong></span>
+                                                    <span>موعد التذكير: <strong>{reminderPreview.targetDate}</strong></span>
                                                 </div>
                                                 <span className="font-bold px-2 py-0.5 rounded-md bg-purple-200/80 dark:bg-purple-800/90 text-[10.5px]">
                                                     {reminderPreview.text}
@@ -4486,7 +4486,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                ÙƒÙˆØ¯ Ø§Ù„ÙØ§ØªÙˆØ±Ø© (Invoice Code)
+                                                كود الفاتورة (Invoice Code)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-file-invoice absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4494,7 +4494,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     type="text"
                                                     value={formData.invoiceNumber}
                                                     onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })}
-                                                    placeholder="Ù…Ø«Ø§Ù„: INV-100234"
+                                                    placeholder="مثال: INV-100234"
                                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                                 />
                                             </div>
@@ -4502,7 +4502,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                Ø§Ù„ÙÙŠØ²Ø§ / Ø±Ù‚Ù… Ø§Ù„Ø¨Ø·Ø§Ù‚Ø© (Visa)
+                                                الفيزا / رقم البطاقة (Visa)
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-credit-card absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
@@ -4538,13 +4538,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             {/* Notes Field (Directly under duration / visa for all sheets) */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    {currentSheetId === 'reminders_data' ? 'ØªÙØ§ØµÙŠÙ„ ÙˆÙ…Ù„Ø§Ø­Ø¸Ø§Øª Ø§Ù„ØªØ°ÙƒÙŠØ±' : 'Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©'}
+                                    {currentSheetId === 'reminders_data' ? 'تفاصيل وملاحظات التذكير' : 'ملاحظات إضافية'}
                                 </label>
                                 <textarea
                                     rows={currentSheetId === 'reminders_data' ? 3 : 2}
                                     value={formData.notes}
                                     onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                    placeholder={currentSheetId === 'reminders_data' ? 'Ø§ÙƒØªØ¨ Ø£ÙŠ ØªÙØ§ØµÙŠÙ„ØŒ Ø£Ø±Ù‚Ø§Ù… ØªÙˆØ§ØµÙ„ØŒ Ø­Ø³Ø§Ø¨Ø§ØªØŒ Ø£Ùˆ Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ù‡Ø§Ù…Ø© ØªØ®Øµ Ø§Ù„ØªØ°ÙƒÙŠØ±...' : 'Ø£ÙŠ ØªÙØ§ØµÙŠÙ„ Ø£Ùˆ Ù…Ù„Ø§Ø­Ø¸Ø§Øª Ø¥Ø¶Ø§ÙÙŠØ©...'}
+                                    placeholder={currentSheetId === 'reminders_data' ? 'اكتب أي تفاصيل، أرقام تواصل، حسابات، أو ملاحظات هامة تخص التذكير...' : 'أي تفاصيل أو ملاحظات إضافية...'}
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 resize-none"
                                 />
                             </div>
@@ -4559,14 +4559,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     className="px-5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-xmark text-slate-400 text-xs"></i>
-                                    <span>Ø¥Ù„ØºØ§Ø¡</span>
+                                    <span>إلغاء</span>
                                 </button>
                                 <button
                                     type="submit"
                                     className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition transform active:scale-95 flex items-center gap-1.5 cursor-pointer"
                                 >
                                     <i className="fa-solid fa-check text-xs"></i>
-                                    <span>{editingRecord ? 'Ø­ÙØ¸ Ø§Ù„ØªØ¹Ø¯ÙŠÙ„Ø§Øª' : 'Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„'}</span>
+                                    <span>{editingRecord ? 'حفظ التعديلات' : 'إضافة السجل'}</span>
                                 </button>
                             </div>
                         </form>
@@ -4584,8 +4584,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     <i className="fa-solid fa-layer-group"></i>
                                 </div>
                                 <div>
-                                    <h3 className="font-black text-lg text-slate-800 dark:text-white">Ø¥Ø¶Ø§ÙØ© Ù…Ø¬Ù…Ø¹Ø© Ø³Ø±ÙŠØ¹Ø©</h3>
-                                    <p className="text-xs text-slate-400">Ø¥Ø¶Ø§ÙØ© Ø¹Ø¯Ø© Ø£Ø³Ø·Ø± Ø¯ÙØ¹Ø© ÙˆØ§Ø­Ø¯Ø© Ø¥Ù„Ù‰ <b className="text-indigo-500">{currentSheet.name}</b></p>
+                                    <h3 className="font-black text-lg text-slate-800 dark:text-white">إضافة مجمعة سريعة</h3>
+                                    <p className="text-xs text-slate-400">إضافة عدة أسطر دفعة واحدة إلى <b className="text-indigo-500">{currentSheet.name}</b></p>
                                 </div>
                             </div>
                             <button
@@ -4597,20 +4597,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </div>
 
                         <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                            <p className="font-bold text-slate-800 dark:text-slate-200">Ø§Ù„ØµÙŠØº Ø§Ù„Ù…Ø¯Ø¹ÙˆÙ…Ø© Ù„ÙƒÙ„ Ø³Ø·Ø± (Ù…ÙØµÙˆÙ„Ø© Ø¨Ù€ : Ø£Ùˆ | Ø£Ùˆ Tab):</p>
+                            <p className="font-bold text-slate-800 dark:text-slate-200">الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):</p>
                             {isClientOrMerchant ? (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass1:pass2:duration:notes
                                     </p>
-                                    <p className="text-[11px] text-slate-400">Ù…Ø«Ø§Ù„: user@mail.com:Pass123:PassAlt:1 Ø´Ù‡Ø±:Ø¹Ù…ÙŠÙ„ Ù…Ù…ÙŠØ²</p>
+                                    <p className="text-[11px] text-slate-400">مثال: user@mail.com:Pass123:PassAlt:1 شهر:عميل مميز</p>
                                 </>
                             ) : (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass:pass2:invoice:visa:visaAccount:notes
                                     </p>
-                                    <p className="text-[11px] text-slate-400">Ù…Ø«Ø§Ù„: user@mail.com:Pass123:PassAlt:INV-99:4111222233334444:CIB Bank:Ø¹Ù…ÙŠÙ„ Ù…Ù…ÙŠØ²</p>
+                                    <p className="text-[11px] text-slate-400">مثال: user@mail.com:Pass123:PassAlt:INV-99:4111222233334444:CIB Bank:عميل مميز</p>
                                 </>
                             )}
                         </div>
@@ -4620,13 +4620,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 rows={8}
                                 value={bulkText}
                                 onChange={(e) => setBulkText(e.target.value)}
-                                placeholder="Ø§Ù„ØµÙ‚ Ø§Ù„Ø¨ÙŠØ§Ù†Ø§Øª Ù‡Ù†Ø§ØŒ ÙƒÙ„ Ø³Ø·Ø± ÙŠÙ…Ø«Ù„ Ø³Ø¬Ù„Ø§Ù‹ Ù…Ù†ÙØµÙ„Ø§Ù‹..."
+                                placeholder="الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً..."
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dir-ltr text-left"
                             />
 
                             <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                                 <span className="text-xs text-slate-400">
-                                    Ø¹Ø¯Ø¯ Ø§Ù„Ø£Ø³Ø·Ø±: <b className="text-slate-700 dark:text-slate-200">{bulkText.split('\n').filter(l => l.trim()).length}</b>
+                                    عدد الأسطر: <b className="text-slate-700 dark:text-slate-200">{bulkText.split('\n').filter(l => l.trim()).length}</b>
                                 </span>
                                 <div className="flex items-center gap-3">
                                     <button
@@ -4634,13 +4634,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         onClick={() => setShowBulkModal(false)}
                                         className="px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition"
                                     >
-                                        Ø¥Ù„ØºØ§Ø¡
+                                        إلغاء
                                     </button>
                                     <button
                                         type="submit"
                                         className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition transform active:scale-95"
                                     >
-                                        Ø¥Ø¶Ø§ÙØ© Ø§Ù„Ø³Ø¬Ù„Ø§Øª
+                                        إضافة السجلات
                                     </button>
                                 </div>
                             </div>
@@ -4654,7 +4654,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-                            <h3 className="font-black text-base text-slate-800 dark:text-white">ØªØ¹Ø¯ÙŠÙ„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª</h3>
+                            <h3 className="font-black text-base text-slate-800 dark:text-white">تعديل اسم الشيت</h3>
                             <button
                                 onClick={() => setShowRenameModal(false)}
                                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition"
@@ -4666,13 +4666,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <form onSubmit={handleRenameSheet} className="space-y-4">
                             <div>
                                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                    Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª Ø§Ù„Ø¬Ø¯ÙŠØ¯
+                                    اسم الشيت الجديد
                                 </label>
                                 <input
                                     type="text"
                                     value={renameValue}
                                     onChange={(e) => setRenameValue(e.target.value)}
-                                    placeholder="Ø£Ø¯Ø®Ù„ Ø§Ø³Ù… Ø§Ù„Ø´ÙŠØª"
+                                    placeholder="أدخل اسم الشيت"
                                     className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
                                 />
                             </div>
@@ -4683,13 +4683,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     onClick={() => setShowRenameModal(false)}
                                     className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition"
                                 >
-                                    Ø¥Ù„ØºØ§Ø¡
+                                    إلغاء
                                 </button>
                                 <button
                                     type="submit"
                                     className="px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold shadow-lg shadow-indigo-600/30 transition"
                                 >
-                                    Ø­ÙØ¸ Ø§Ù„Ø§Ø³Ù…
+                                    حفظ الاسم
                                 </button>
                             </div>
                         </form>
