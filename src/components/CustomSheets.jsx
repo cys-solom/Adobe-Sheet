@@ -4086,7 +4086,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             )}
 
                             {/* Duration & Start Date (for Client / Merchant) */}
-                            {(isClientOrMerchant || currentSheetId === 'account_data') && (
+                            {isClientOrMerchant && (
                                 <>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* Duration (Custom Dropdown matching design) */}
