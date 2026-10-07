@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
 import { sheetsAPI } from '../services/api';
-import { SHEETS_CHANGED, sellCloudAccount, syncAccountUsageFromCloudSheets, markSubscriptionNotRenewed } from '../services/sheetSync';
+import { SHEETS_CHANGED, sellCloudAccount, syncAccountUsageFromCloudSheets } from '../services/sheetSync';
 import {
     DEFAULT_SHEETS,
     sanitizeRecord,
@@ -330,7 +330,6 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [accountStockFilter, setAccountStockFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
-    const [accountCustomerRecords, setAccountCustomerRecords] = useState([]);
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -401,23 +400,6 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         }
     };
 
-    const refreshAccountCustomerRecords = async () => {
-        try {
-            const allData = await sheetsAPI.getAllSheetsData();
-            const sheetNames = { client_data: 'Client', merchant_data: 'Merchant' };
-            const linkedRecords = ['client_data', 'merchant_data'].flatMap(sheetId => (
-                Array.isArray(allData?.[sheetId]) ? allData[sheetId] : []
-            ).map((record, index) => {
-                const sanitized = sanitizeRecord(record, index);
-                return sanitized ? { ...sanitized, sheetId, sheetName: sheetNames[sheetId] || sheetId } : null;
-            }).filter(Boolean));
-            setAccountCustomerRecords(linkedRecords);
-        } catch (e) {
-            console.error('Error loading linked account customers:', e);
-            setAccountCustomerRecords([]);
-        }
-    };
-
     // Load records whenever currentSheetId changes with automatic row sanitization
     const loadCurrentSheetData = async () => {
         try {
@@ -426,9 +408,6 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             if (cloudRecords && Array.isArray(cloudRecords)) {
                 const sanitized = cloudRecords.map((item, idx) => sanitizeRecord(item, idx)).filter(Boolean);
                 setRecords(sanitized);
-                if (currentSheetId === 'account_data') {
-                    await refreshAccountCustomerRecords();
-                }
                 await refreshAllCounts();
             }
         } catch (e) {
@@ -1182,92 +1161,6 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             };
         });
         if (await saveRecords(updated)) showToast('ChatGPT renewed and user count reset', 'success');
-    };
-
-    const getAccountIdentityKeys = (record) => [record?.id, record?.email, record?.selectedAccount]
-        .map(value => String(value || '').trim().toLowerCase())
-        .filter(Boolean);
-
-    const getCustomerAccountKeys = (record) => [record?.selectedAccount, record?.email]
-        .map(value => String(value || '').trim().toLowerCase())
-        .filter(Boolean);
-
-    const getLinkedCustomersForAccount = (account) => {
-        const accountKeys = getAccountIdentityKeys(account);
-        if (accountKeys.length === 0) return [];
-        return accountCustomerRecords
-            .filter(customer => {
-                if (customer.deletedAt) return false;
-                const customerKeys = getCustomerAccountKeys(customer);
-                return customerKeys.some(key => accountKeys.includes(key));
-            })
-            .sort((a, b) => {
-                const aState = getCustomerLifecycle(a).rank;
-                const bState = getCustomerLifecycle(b).rank;
-                return aState - bState || String(a.name || a.email).localeCompare(String(b.name || b.email));
-            });
-    };
-
-    const getCustomerLifecycle = (customer) => {
-        const notRenewed = customer.renewalStatus === 'not_renewed' || Boolean(customer.nonRenewedAt);
-        if (notRenewed) return { label: 'Not renewed', tone: 'rose', rank: 4, rem: null };
-        const rem = calculateRemainingTime(customer.startDate, customer.duration, customer.created_at);
-        if (rem?.days !== null && rem.days < 0) return { label: rem.text || 'Expired', tone: 'rose', rank: 3, rem };
-        if (rem?.days !== null && rem.days <= 3) return { label: rem.text || 'Near renewal', tone: 'amber', rank: 2, rem };
-        return { label: rem?.text || 'Active', tone: 'emerald', rank: 1, rem };
-    };
-
-    const handleRenewLinkedCustomer = async (customer) => {
-        if (!customer?.id || !customer?.sheetId) return;
-        const nextDuration = window.prompt('Renew duration for this customer on the same account:', customer.duration || '1 month');
-        if (nextDuration === null) return;
-        const today = getTodayPlainDate();
-        try {
-            const sheetRecords = await sheetsAPI.getSheetRecords(customer.sheetId);
-            const updated = (Array.isArray(sheetRecords) ? sheetRecords : []).map((record, index) => {
-                const sanitized = sanitizeRecord(record, index);
-                if (!sanitized || String(sanitized.id) !== String(customer.id)) return record;
-                return {
-                    ...record,
-                    duration: String(nextDuration || customer.duration || '').trim(),
-                    startDate: today,
-                    renewalStatus: '',
-                    nonRenewedAt: '',
-                    releasedAccountAt: '',
-                    notes: [sanitized.notes, 'Renewed on same account'].filter(Boolean).join(' | '),
-                    updated_at: new Date().toISOString()
-                };
-            });
-            await sheetsAPI.saveSheetRecords(customer.sheetId, updated);
-            await syncAccountUsageFromCloudSheets({ [customer.sheetId]: updated });
-            await refreshAccountCustomerRecords();
-            await loadCurrentSheetData();
-            showToast('Customer renewed on the same account', 'success');
-        } catch (error) {
-            console.error('Failed renewing linked customer:', error);
-            showToast('Could not renew this customer', 'error');
-        }
-    };
-
-    const handleReturnLinkedCustomer = async (customer) => {
-        if (!customer?.id || !customer?.sheetId) return;
-        const newPassword = window.prompt('New Adobe password after returning this customer slot. Leave empty to keep current password:', customer.password2 || '');
-        if (newPassword === null) return;
-        const confirmed = window.confirm('Mark this customer as not renewed and return only their slot to stock?');
-        if (!confirmed) return;
-        try {
-            await markSubscriptionNotRenewed({
-                sheetId: customer.sheetId,
-                recordId: customer.id,
-                newPassword: String(newPassword || '').trim()
-            });
-            await refreshAccountCustomerRecords();
-            await loadCurrentSheetData();
-            showToast('Customer slot returned to stock', 'success');
-        } catch (error) {
-            console.error('Failed returning linked customer:', error);
-            showToast('Could not return this customer slot', 'error');
-        }
     };
 
     const handleToggleOfferActivated = async (id) => {
@@ -3533,84 +3426,21 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                 );
                                                             }
                                                             const isReused = isReusedAccount(rec);
-                                                            const linkedCustomers = getLinkedCustomersForAccount(rec);
-                                                            const activeLinkedCount = linkedCustomers.filter(customer => !(customer.renewalStatus === 'not_renewed' || customer.nonRenewedAt)).length;
                                                             return (
-                                                                <div className="min-w-[280px] space-y-1.5">
-                                                                    <div className="flex flex-wrap items-center gap-1">
-                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
-                                                                            <i className="fa-solid fa-palette text-[8px]"></i>
-                                                                            Adobe
+                                                                <div className="flex flex-wrap items-center gap-1">
+                                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200 whitespace-nowrap">
+                                                                        <i className="fa-solid fa-palette text-[8px]"></i>
+                                                                        Adobe
+                                                                    </span>
+                                                                    {isReused && (
+                                                                        <span
+                                                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
+                                                                            title={rec.releasedAccountAt ? `Returned to stock on ${String(rec.releasedAccountAt).slice(0, 10)}` : 'Returned to stock after no renewal'}
+                                                                        >
+                                                                            <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                            Reused after expiry
                                                                         </span>
-                                                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-slate-50 text-slate-700 border border-slate-200 whitespace-nowrap">
-                                                                            <i className="fa-solid fa-users text-[8px]"></i>
-                                                                            {activeLinkedCount}/{Math.max(1, Number(rec.maxUses || 2))} customers
-                                                                        </span>
-                                                                        {isReused && (
-                                                                            <span
-                                                                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-black bg-orange-50 text-orange-700 border border-orange-200 whitespace-nowrap dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800"
-                                                                                title={rec.releasedAccountAt ? `Returned to stock on ${String(rec.releasedAccountAt).slice(0, 10)}` : 'Returned to stock after no renewal'}
-                                                                            >
-                                                                                <i className="fa-solid fa-rotate text-[8px]"></i>
-                                                                                Reused after expiry
-                                                                            </span>
-                                                                        )}
-                                                                    </div>
-
-                                                                    <div className="space-y-1">
-                                                                        {linkedCustomers.length === 0 ? (
-                                                                            <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-2 py-1 text-[10px] font-bold text-slate-400">
-                                                                                No linked customers
-                                                                            </div>
-                                                                        ) : linkedCustomers.slice(0, 3).map(customer => {
-                                                                            const lifecycle = getCustomerLifecycle(customer);
-                                                                            const toneClass = lifecycle.tone === 'rose'
-                                                                                ? 'bg-rose-50 text-rose-700 border-rose-200'
-                                                                                : lifecycle.tone === 'amber'
-                                                                                ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                                                                : 'bg-emerald-50 text-emerald-700 border-emerald-200';
-                                                                            return (
-                                                                                <div key={`${customer.sheetId}_${customer.id}`} className="rounded-lg border border-slate-200 bg-white px-2 py-1 shadow-xs dark:border-slate-700 dark:bg-slate-900">
-                                                                                    <div className="flex items-center justify-between gap-2">
-                                                                                        <div className="min-w-0">
-                                                                                            <div className="truncate text-[11px] font-black text-slate-800 dark:text-slate-100" title={customer.name || customer.email || customer.id}>
-                                                                                                {customer.name || 'No name'}
-                                                                                            </div>
-                                                                                            <div className="truncate font-mono text-[10px] font-bold text-slate-400" title={customer.phone || customer.email}>
-                                                                                                {customer.phone || customer.email || '-'}
-                                                                                            </div>
-                                                                                        </div>
-                                                                                        <span className={`shrink-0 rounded-md border px-1.5 py-0.5 text-[9px] font-black ${toneClass}`}>
-                                                                                            {lifecycle.label}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <div className="mt-1 flex flex-wrap items-center gap-1">
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => handleRenewLinkedCustomer(customer)}
-                                                                                            className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[9px] font-black text-emerald-700 hover:bg-emerald-100"
-                                                                                            title="Renew this customer on the same account"
-                                                                                        >
-                                                                                            <i className="fa-solid fa-rotate text-[8px]"></i>
-                                                                                            Renew same
-                                                                                        </button>
-                                                                                        <button
-                                                                                            type="button"
-                                                                                            onClick={() => handleReturnLinkedCustomer(customer)}
-                                                                                            className="inline-flex items-center gap-1 rounded-md border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black text-rose-700 hover:bg-rose-100"
-                                                                                            title="Mark this customer not renewed and return only their slot"
-                                                                                        >
-                                                                                            <i className="fa-solid fa-user-xmark text-[8px]"></i>
-                                                                                            Not renewed
-                                                                                        </button>
-                                                                                    </div>
-                                                                                </div>
-                                                                            );
-                                                                        })}
-                                                                        {linkedCustomers.length > 3 && (
-                                                                            <div className="text-[10px] font-bold text-slate-400">+{linkedCustomers.length - 3} more linked records</div>
-                                                                        )}
-                                                                    </div>
+                                                                    )}
                                                                 </div>
                                                             );
                                                         })()}
