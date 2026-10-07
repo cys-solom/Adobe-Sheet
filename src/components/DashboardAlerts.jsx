@@ -83,7 +83,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
     };
 
     const handleMarkNotRenewed = async (item) => {
-        if (!item?.id || !item?.sheetId || item.alertType !== 'expired') return;
+        if (!item?.id || !item?.sheetId || !['near', 'expired'].includes(item.alertType)) return;
         const related = findRelatedExpiredSubscriptions(item);
         let target = item;
         if (related.length > 1) {
@@ -106,7 +106,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
         if (newPassword === null) return;
         const trimmedPassword = String(newPassword || '').trim();
 
-        const ok = window.confirm('Confirm not renewed: mark this customer and return their device/account slot to stock?');
+        const ok = window.confirm('Confirm not renewed: mark this customer and return their device/account slot to stock? This can be done before the subscription fully expires.');
         if (!ok) return;
 
         const key = `${target.sheetId}_${target.id}`;
@@ -697,14 +697,18 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
                                         </span>
 
                                         <div className="flex items-center gap-2">
-                                            {item.alertType === 'expired' && (
+                                            {['near', 'expired'].includes(item.alertType) && (
                                                 <button
                                                     onClick={() => handleMarkNotRenewed(item)}
                                                     disabled={isProcessing}
-                                                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-slate-700 hover:bg-slate-800 disabled:opacity-60 shadow-sm transition flex items-center gap-1.5"
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold text-white disabled:opacity-60 shadow-sm transition flex items-center gap-1.5 ${
+                                                        item.alertType === 'near'
+                                                            ? 'bg-amber-600 hover:bg-amber-700 shadow-amber-500/20'
+                                                            : 'bg-slate-700 hover:bg-slate-800'
+                                                    }`}
                                                 >
                                                     <i className={`fa-solid ${isProcessing ? 'fa-spinner fa-spin' : 'fa-user-xmark'} text-xs`}></i>
-                                                    <span>{isProcessing ? 'Saving...' : 'Not renewed'}</span>
+                                                    <span>{isProcessing ? 'Saving...' : (item.alertType === 'near' ? 'Return to stock' : 'Not renewed')}</span>
                                                 </button>
                                             )}
                                             {isNotRenewed && (
