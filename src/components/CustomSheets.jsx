@@ -331,6 +331,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
     const [noRenewModal, setNoRenewModal] = useState({ open: false, record: null, newPassword: '', isSubmitting: false });
+    const [renewModal, setRenewModal] = useState({ open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -1176,24 +1177,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             });
     };
 
-    const chooseRenewalAccount = async (record) => {
-        const hasSameAccount = Boolean(record.selectedAccount || record.email);
-        let mode = hasSameAccount
-            ? window.prompt('Renew account choice: 1 = same account, 2 = another stock account, 3 = keep manual data', '1')
-            : window.prompt('Renew account choice: 1 = choose stock account, 2 = keep manual data', '1');
-        if (mode === null) return null;
-        mode = String(mode || '').trim();
-
-        if ((hasSameAccount && mode === '1') || (!hasSameAccount && mode === '2')) {
+    const getRenewalAccountPatch = (record, accountMode, selectedAccountValue) => {
+        if (accountMode === 'same') {
             return {
                 selectedAccount: record.selectedAccount || record.email || '',
-                email: record.email || '',
+                email: record.email || record.selectedAccount || '',
                 password: record.password || '',
                 password2: record.password2 || ''
             };
         }
 
-        if (hasSameAccount && mode === '3') {
+        if (accountMode === 'manual') {
             return {
                 selectedAccount: record.selectedAccount || '',
                 email: record.email || '',
@@ -1202,27 +1196,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             };
         }
 
-        const options = await getAvailableAdobeAccountOptions();
-        if (options.length === 0) {
-            showToast('No available stock accounts right now', 'warning');
-            return null;
-        }
+        const selected = availableAccountChoices.find(account => {
+            const value = String(selectedAccountValue || '').trim().toLowerCase();
+            return String(account.id || '').toLowerCase() === value
+                || String(account.email || '').toLowerCase() === value
+                || String(account.selectedAccount || '').toLowerCase() === value;
+        });
 
-        const list = options.slice(0, 30).map((account, index) => {
-            const currentUses = Math.max(0, Number(account.currentUses || 0));
-            const maxUses = Math.max(1, Number(account.maxUses || 2));
-            const remaining = Math.max(0, maxUses - currentUses);
-            return `${index + 1}. ${account.email || account.selectedAccount} (${remaining}/${maxUses} free)`;
-        }).join('\n');
-        const choice = window.prompt('Choose account for renewal:\n' + list, '1');
-        if (choice === null) return null;
-        const selectedIndex = Number(choice) - 1;
-        const selected = options[selectedIndex];
-        if (!selected) {
-            showToast('Invalid account choice', 'warning');
-            return null;
-        }
-
+        if (!selected) return null;
         return {
             selectedAccount: selected.email || selected.selectedAccount || '',
             email: selected.email || selected.selectedAccount || '',
@@ -1231,13 +1212,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         };
     };
 
-    const buildRenewedCustomerRecord = (record, duration, accountPatch) => {
+    const buildRenewedCustomerRecord = (record, duration, accountPatch, deviceType) => {
         const { deletedAt, originSheetId, originSheetName, ...cleanRecord } = record;
+        const isPersonal = deviceType === '????' || deviceType === '??????';
         return {
             ...cleanRecord,
             ...accountPatch,
             duration: String(duration || record.duration || '').trim(),
             startDate: getTodayPlainDate(),
+            deviceType: isPersonal ? '????' : '?????',
+            accountUsageMode: isPersonal ? 'personal' : 'shared_one_device',
+            saleType: isPersonal ? 'personal' : 'shared_one_device',
             renewalStatus: '',
             nonRenewedAt: '',
             releasedAccountAt: '',
@@ -1248,15 +1233,51 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     const handleRenewCustomerCycle = async (record, fromArchive = false) => {
         if (!record?.id) return;
-        const duration = window.prompt('Renewal duration:', record.duration || '1 month');
-        if (duration === null) return;
-        const accountPatch = await chooseRenewalAccount(record);
-        if (!accountPatch) return;
+        await refreshAvailableAccounts();
+        const hasSameAccount = Boolean(record.selectedAccount || record.email);
+        setRenewModal({
+            open: true,
+            record,
+            fromArchive,
+            duration: record.duration || '1 ???',
+            deviceType: (record.deviceType === '????' || record.deviceType === '??????') ? '????' : '?????',
+            accountMode: hasSameAccount ? 'same' : 'stock',
+            selectedAccount: '',
+            isSubmitting: false
+        });
+    };
 
-        const targetSheetId = fromArchive ? (record.originSheetId || 'client_data') : currentSheetId;
+    const closeRenewModal = () => {
+        setRenewModal(prev => prev.isSubmitting ? prev : { open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+    };
+
+    const submitRenewModal = async (event) => {
+        event.preventDefault();
+        const record = renewModal.record;
+        if (!record?.id) return;
+        if (!renewModal.duration) {
+            showToast('Please choose renewal duration', 'warning');
+            return;
+        }
+
+        const accountPatch = getRenewalAccountPatch(record, renewModal.accountMode, renewModal.selectedAccount);
+        if (!accountPatch) {
+            showToast('Please choose an available stock account', 'warning');
+            return;
+        }
+        if (renewModal.accountMode === 'stock' && renewModal.deviceType === '????') {
+            const selectedStock = availableAccountChoices.find(account => String(account.id || account.email || account.selectedAccount || '') === String(renewModal.selectedAccount || ''));
+            if (selectedStock && Number(selectedStock.currentUses || 0) > 0) {
+                showToast('Personal renewal needs a fully available account from stock', 'warning');
+                return;
+            }
+        }
+
+        setRenewModal(prev => ({ ...prev, isSubmitting: true }));
+        const targetSheetId = renewModal.fromArchive ? (record.originSheetId || 'client_data') : currentSheetId;
         try {
-            const renewedRecord = buildRenewedCustomerRecord(record, duration, accountPatch);
-            if (fromArchive) {
+            const renewedRecord = buildRenewedCustomerRecord(record, renewModal.duration, accountPatch, renewModal.deviceType);
+            if (renewModal.fromArchive) {
                 const targetRecords = await sheetsAPI.getSheetRecords(targetSheetId);
                 const updatedTarget = [renewedRecord, ...(Array.isArray(targetRecords) ? targetRecords : [])]
                     .map((item, index) => sanitizeRecord(item, index))
@@ -1270,9 +1291,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 const updated = records.map(item => String(item.id) === String(record.id) ? renewedRecord : item);
                 await saveRecords(updated);
             }
+            setRenewModal({ open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
             showToast('Customer renewed successfully', 'success');
         } catch (error) {
             console.error('Failed renewing customer cycle:', error);
+            setRenewModal(prev => ({ ...prev, isSubmitting: false }));
             showToast('Could not renew customer', 'error');
         }
     };
@@ -3837,6 +3860,169 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
+            {/* Modal: Renew Customer */}
+            {renewModal.open && renewModal.record && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <form onSubmit={submitRenewModal} className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
+                        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-300 flex items-center justify-center border border-emerald-200 dark:border-emerald-800">
+                                    <i className="fa-solid fa-rotate"></i>
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-sm text-slate-900 dark:text-white">Renew Customer</h3>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Choose duration, subscription type, and account source</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeRenewModal}
+                                disabled={renewModal.isSubmitting}
+                                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition disabled:opacity-50"
+                            >
+                                <i className="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-5 overflow-y-auto custom-modal-scroll">
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-3 text-xs">
+                                <div>
+                                    <span className="block text-slate-500 dark:text-slate-400 font-bold mb-1">Customer</span>
+                                    <span className="font-black text-slate-800 dark:text-slate-100 truncate block">{renewModal.record.name || '-'}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-slate-500 dark:text-slate-400 font-bold mb-1">Phone</span>
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200 truncate block">{renewModal.record.phone || '-'}</span>
+                                </div>
+                                <div>
+                                    <span className="block text-slate-500 dark:text-slate-400 font-bold mb-1">Current account</span>
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200 truncate block">{renewModal.record.selectedAccount || renewModal.record.email || '-'}</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <i className="fa-regular fa-calendar text-emerald-500"></i>
+                                    Renewal duration
+                                </p>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {DURATION_ITEMS.map(item => (
+                                        <button
+                                            key={item.value}
+                                            type="button"
+                                            onClick={() => setRenewModal(prev => ({ ...prev, duration: item.value }))}
+                                            className={`px-3 py-2 rounded-xl border text-[11px] font-black transition ${renewModal.duration === item.value ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'}`}
+                                        >
+                                            {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <i className="fa-solid fa-users-gear text-blue-500"></i>
+                                    Subscription type
+                                </p>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { id: '?????', label: '?????', icon: 'fa-user-group' },
+                                        { id: '????', label: '????', icon: 'fa-user-shield' },
+                                    ].map(item => (
+                                        <button
+                                            key={item.id}
+                                            type="button"
+                                            onClick={() => setRenewModal(prev => ({ ...prev, deviceType: item.id }))}
+                                            className={`px-3 py-2 rounded-xl border text-xs font-black transition flex items-center justify-center gap-2 ${renewModal.deviceType === item.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-blue-50 dark:hover:bg-blue-950/30'}`}
+                                        >
+                                            <i className={`fa-solid ${item.icon}`}></i>
+                                            <span>{item.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                                    <i className="fa-solid fa-boxes-stacked text-purple-500"></i>
+                                    Account choice
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+                                    {(renewModal.record.selectedAccount || renewModal.record.email) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setRenewModal(prev => ({ ...prev, accountMode: 'same', selectedAccount: '' }))}
+                                            className={`px-3 py-2 rounded-xl border text-[11px] font-black transition ${renewModal.accountMode === 'same' ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-purple-50 dark:hover:bg-purple-950/30'}`}
+                                        >
+                                            Same account
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => setRenewModal(prev => ({ ...prev, accountMode: 'stock' }))}
+                                        className={`px-3 py-2 rounded-xl border text-[11px] font-black transition ${renewModal.accountMode === 'stock' ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-purple-50 dark:hover:bg-purple-950/30'}`}
+                                    >
+                                        Choose from stock
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setRenewModal(prev => ({ ...prev, accountMode: 'manual', selectedAccount: '' }))}
+                                        className={`px-3 py-2 rounded-xl border text-[11px] font-black transition ${renewModal.accountMode === 'manual' ? 'bg-purple-600 text-white border-purple-600' : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-purple-50 dark:hover:bg-purple-950/30'}`}
+                                    >
+                                        Keep current data
+                                    </button>
+                                </div>
+
+                                {renewModal.accountMode === 'stock' && (
+                                    <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto custom-modal-scroll pr-1">
+                                        {availableAccountChoices.length > 0 ? availableAccountChoices.map(account => {
+                                            const maxUses = Math.max(1, Number(account.maxUses || 2));
+                                            const currentUses = Math.max(0, Number(account.currentUses || 0));
+                                            const remaining = Math.max(0, maxUses - currentUses);
+                                            const value = account.id || account.email || account.selectedAccount;
+                                            const active = String(renewModal.selectedAccount || '') === String(value || '');
+                                            return (
+                                                <button
+                                                    key={value}
+                                                    type="button"
+                                                    onClick={() => setRenewModal(prev => ({ ...prev, selectedAccount: value }))}
+                                                    className={`text-left dir-ltr rounded-xl border px-3 py-2 transition ${active ? 'bg-purple-600 text-white border-purple-600' : 'bg-white dark:bg-slate-950 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:border-purple-300 dark:hover:border-purple-700'}`}
+                                                >
+                                                    <div className="font-mono text-xs font-black truncate">{account.email || account.selectedAccount}</div>
+                                                    <div className={`text-[10px] font-bold mt-1 ${active ? 'text-purple-100' : 'text-slate-400'}`}>{remaining}/{maxUses} free slots</div>
+                                                </button>
+                                            );
+                                        }) : (
+                                            <div className="rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/25 p-3 text-xs font-bold text-amber-700 dark:text-amber-200">
+                                                No available stock accounts right now.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeRenewModal}
+                                disabled={renewModal.isSubmitting}
+                                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={renewModal.isSubmitting}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-sm transition disabled:opacity-60 flex items-center gap-2"
+                            >
+                                {renewModal.isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-check"></i>}
+                                <span>Confirm renewal</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
             {/* Modal: No Renew */}
             {noRenewModal.open && noRenewModal.record && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
