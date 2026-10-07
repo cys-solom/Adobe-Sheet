@@ -331,7 +331,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
     const [noRenewModal, setNoRenewModal] = useState({ open: false, record: null, newPassword: '', isSubmitting: false });
-    const [renewModal, setRenewModal] = useState({ open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+    const [renewModal, setRenewModal] = useState({ open: false, record: null, fromArchive: false, duration: DURATION_ITEMS[0]?.value || '1 month', deviceType: 'shared', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+    const [renewStockAccounts, setRenewStockAccounts] = useState([]);
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -1196,7 +1197,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             };
         }
 
-        const selected = availableAccountChoices.find(account => {
+        const selected = renewStockAccounts.find(account => {
             const value = String(selectedAccountValue || '').trim().toLowerCase();
             return String(account.id || '').toLowerCase() === value
                 || String(account.email || '').toLowerCase() === value
@@ -1214,13 +1215,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     const buildRenewedCustomerRecord = (record, duration, accountPatch, deviceType) => {
         const { deletedAt, originSheetId, originSheetName, ...cleanRecord } = record;
-        const isPersonal = deviceType === '????' || deviceType === '??????';
+        const isPersonal = deviceType === 'personal';
         return {
             ...cleanRecord,
             ...accountPatch,
             duration: String(duration || record.duration || '').trim(),
             startDate: getTodayPlainDate(),
-            deviceType: isPersonal ? '????' : '?????',
+            deviceType: isPersonal ? '\u0634\u062e\u0635\u064a' : '\u0645\u0634\u062a\u0631\u0643',
             accountUsageMode: isPersonal ? 'personal' : 'shared_one_device',
             saleType: isPersonal ? 'personal' : 'shared_one_device',
             renewalStatus: '',
@@ -1231,16 +1232,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         };
     };
 
+    const resetRenewModal = () => {
+        setRenewModal({ open: false, record: null, fromArchive: false, duration: DURATION_ITEMS[0]?.value || '1 month', deviceType: 'shared', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+        setRenewStockAccounts([]);
+    };
+
     const handleRenewCustomerCycle = async (record, fromArchive = false) => {
         if (!record?.id) return;
-        await refreshAvailableAccounts();
+        const stockOptions = await getAvailableAdobeAccountOptions();
+        setRenewStockAccounts(stockOptions);
+        setAvailableAccounts(stockOptions);
         const hasSameAccount = Boolean(record.selectedAccount || record.email);
         setRenewModal({
             open: true,
             record,
             fromArchive,
-            duration: record.duration || '1 ???',
-            deviceType: (record.deviceType === '????' || record.deviceType === '??????') ? '????' : '?????',
+            duration: record.duration || DURATION_ITEMS[0]?.value || '1 month',
+            deviceType: (record.deviceType === '\u0634\u062e\u0635\u064a' || record.deviceType === '\u062c\u0647\u0627\u0632\u064a\u0646' || record.accountUsageMode === 'personal' || record.saleType === 'personal') ? 'personal' : 'shared',
             accountMode: hasSameAccount ? 'same' : 'stock',
             selectedAccount: '',
             isSubmitting: false
@@ -1248,7 +1256,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     const closeRenewModal = () => {
-        setRenewModal(prev => prev.isSubmitting ? prev : { open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+        setRenewModal(prev => {
+            if (prev.isSubmitting) return prev;
+            return { open: false, record: null, fromArchive: false, duration: DURATION_ITEMS[0]?.value || '1 month', deviceType: 'shared', accountMode: 'same', selectedAccount: '', isSubmitting: false };
+        });
+        setRenewStockAccounts([]);
     };
 
     const submitRenewModal = async (event) => {
@@ -1265,8 +1277,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             showToast('Please choose an available stock account', 'warning');
             return;
         }
-        if (renewModal.accountMode === 'stock' && renewModal.deviceType === '????') {
-            const selectedStock = availableAccountChoices.find(account => String(account.id || account.email || account.selectedAccount || '') === String(renewModal.selectedAccount || ''));
+        if (renewModal.accountMode === 'stock' && renewModal.deviceType === 'personal') {
+            const selectedStock = renewStockAccounts.find(account => String(account.id || account.email || account.selectedAccount || '') === String(renewModal.selectedAccount || ''));
             if (selectedStock && Number(selectedStock.currentUses || 0) > 0) {
                 showToast('Personal renewal needs a fully available account from stock', 'warning');
                 return;
@@ -1283,15 +1295,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     .map((item, index) => sanitizeRecord(item, index))
                     .filter(Boolean);
                 await sheetsAPI.saveSheetRecords(targetSheetId, updatedTarget);
-                await syncAccountUsageFromCloudSheets({ [targetSheetId]: updatedTarget });
 
                 const updatedTrash = records.filter(item => String(item.id) !== String(record.id));
                 await saveRecords(updatedTrash);
+                await syncAccountUsageFromCloudSheets({ [targetSheetId]: updatedTarget, trash_data: updatedTrash });
             } else {
                 const updated = records.map(item => String(item.id) === String(record.id) ? renewedRecord : item);
                 await saveRecords(updated);
             }
-            setRenewModal({ open: false, record: null, fromArchive: false, duration: '1 ???', deviceType: '?????', accountMode: 'same', selectedAccount: '', isSubmitting: false });
+            resetRenewModal();
             showToast('Customer renewed successfully', 'success');
         } catch (error) {
             console.error('Failed renewing customer cycle:', error);
@@ -1322,7 +1334,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setNoRenewModal(prev => ({ ...prev, isSubmitting: true }));
         try {
             const newPassword = String(noRenewModal.newPassword || '').trim();
-            await markSubscriptionNotRenewed({
+            const result = await markSubscriptionNotRenewed({
                 sheetId: currentSheetId,
                 recordId: record.id,
                 newPassword
@@ -1332,18 +1344,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             const sanitizedLatest = (Array.isArray(latestRecords) ? latestRecords : [])
                 .map((item, index) => sanitizeRecord(item, index))
                 .filter(Boolean);
-            const markedRecord = sanitizedLatest.find(item => String(item.id) === String(record.id)) || {
-                ...record,
-                password2: newPassword || record.password2 || '',
+            const latestMarked = sanitizedLatest.find(item => String(item.id) === String(record.id));
+            const markedRecord = {
+                ...(latestMarked || record),
+                ...(newPassword ? { password2: newPassword } : {}),
                 renewalStatus: 'not_renewed',
-                nonRenewedAt: new Date().toISOString(),
-                releasedAccountAt: new Date().toISOString()
+                nonRenewedAt: latestMarked?.nonRenewedAt || new Date().toISOString(),
+                releasedAccountAt: latestMarked?.releasedAccountAt || new Date().toISOString()
             };
 
             await moveToTrash([markedRecord], currentSheetId, currentSheet?.name || 'Sheet');
             const activeRecords = sanitizedLatest.filter(item => String(item.id) !== String(record.id));
             await sheetsAPI.saveSheetRecords(currentSheetId, activeRecords);
-            await syncAccountUsageFromCloudSheets({ [currentSheetId]: activeRecords });
+            await syncAccountUsageFromCloudSheets({
+                [currentSheetId]: activeRecords,
+                ...(Array.isArray(result?.accounts) ? { account_data: result.accounts } : {})
+            });
+            if (Array.isArray(result?.accounts)) setAvailableAccounts(result.accounts);
             setRecords(activeRecords);
             await refreshAllCounts();
             setNoRenewModal({ open: false, record: null, newPassword: '', isSubmitting: false });
@@ -3926,8 +3943,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { id: '?????', label: '?????', icon: 'fa-user-group' },
-                                        { id: '????', label: '????', icon: 'fa-user-shield' },
+                                        { id: 'shared', label: '\\u0645\\u0634\\u062a\\u0631\\u0643', icon: 'fa-user-group' },
+                                        { id: 'personal', label: '\\u0634\\u062e\\u0635\\u064a', icon: 'fa-user-shield' },
                                     ].map(item => (
                                         <button
                                             key={item.id}
@@ -3975,7 +3992,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                 {renewModal.accountMode === 'stock' && (
                                     <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto custom-modal-scroll pr-1">
-                                        {availableAccountChoices.length > 0 ? availableAccountChoices.map(account => {
+                                        {renewStockAccounts.length > 0 ? renewStockAccounts.map(account => {
                                             const maxUses = Math.max(1, Number(account.maxUses || 2));
                                             const currentUses = Math.max(0, Number(account.currentUses || 0));
                                             const remaining = Math.max(0, maxUses - currentUses);
