@@ -330,6 +330,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [accountStockFilter, setAccountStockFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
+    const [noRenewModal, setNoRenewModal] = useState({ open: false, record: null, newPassword: '', isSubmitting: false });
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -1276,18 +1277,32 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         }
     };
 
-    const handleMarkCustomerNotRenewedToArchive = async (record) => {
+    const handleMarkCustomerNotRenewedToArchive = (record) => {
         if (!record?.id || !isClientOrMerchant) return;
-        const newPassword = window.prompt('New Adobe password after this customer did not renew. Leave empty to keep current password:', record.password2 || '');
-        if (newPassword === null) return;
-        const confirmed = window.confirm('Mark this customer as not renewed, return their slot to stock, and move them to archive?');
-        if (!confirmed) return;
+        setNoRenewModal({
+            open: true,
+            record,
+            newPassword: record.password2 || '',
+            isSubmitting: false
+        });
+    };
 
+    const closeNoRenewModal = () => {
+        setNoRenewModal(prev => prev.isSubmitting ? prev : { open: false, record: null, newPassword: '', isSubmitting: false });
+    };
+
+    const submitNoRenewModal = async (event) => {
+        event.preventDefault();
+        const record = noRenewModal.record;
+        if (!record?.id || !isClientOrMerchant) return;
+
+        setNoRenewModal(prev => ({ ...prev, isSubmitting: true }));
         try {
+            const newPassword = String(noRenewModal.newPassword || '').trim();
             await markSubscriptionNotRenewed({
                 sheetId: currentSheetId,
                 recordId: record.id,
-                newPassword: String(newPassword || '').trim()
+                newPassword
             });
 
             const latestRecords = await sheetsAPI.getSheetRecords(currentSheetId);
@@ -1296,6 +1311,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 .filter(Boolean);
             const markedRecord = sanitizedLatest.find(item => String(item.id) === String(record.id)) || {
                 ...record,
+                password2: newPassword || record.password2 || '',
                 renewalStatus: 'not_renewed',
                 nonRenewedAt: new Date().toISOString(),
                 releasedAccountAt: new Date().toISOString()
@@ -1307,9 +1323,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             await syncAccountUsageFromCloudSheets({ [currentSheetId]: activeRecords });
             setRecords(activeRecords);
             await refreshAllCounts();
+            setNoRenewModal({ open: false, record: null, newPassword: '', isSubmitting: false });
             showToast('Customer archived as not renewed and slot returned', 'success');
         } catch (error) {
             console.error('Failed archiving not-renewed customer:', error);
+            setNoRenewModal(prev => ({ ...prev, isSubmitting: false }));
             showToast('Could not archive this customer', 'error');
         }
     };
@@ -1785,7 +1803,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             });
         }
 
-        if (renewalFilter !== 'all' && isClientOrMerchant) {
+        if (renewalFilter !== 'all' && (isClientOrMerchant || isTrashSheet || currentSheetId === 'account_data')) {
             result = result.filter(r => {
                 const notRenewed = r.renewalStatus === 'not_renewed' || Boolean(r.nonRenewedAt);
                 return renewalFilter === 'not_renewed' ? notRenewed : !notRenewed;
@@ -1824,7 +1842,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         });
 
         return result;
-    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId, activeAccountCategory, paymentFilter, deviceFilter, renewalFilter, accountStockFilter, isClientOrMerchant]);
+    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId, activeAccountCategory, paymentFilter, deviceFilter, renewalFilter, accountStockFilter, isClientOrMerchant, isTrashSheet]);
 
     // Pagination
     const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
@@ -2406,8 +2424,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
-            {/* Advanced Filters Panel - Client/Merchant Only */}
-            {(isClientOrMerchant || currentSheetId === 'account_data') && (
+            {/* Advanced Filters Panel */}
+            {(isClientOrMerchant || currentSheetId === 'account_data' || isTrashSheet) && (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
                     <button
                         type="button"
@@ -2429,6 +2447,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     {showAdvancedFilters && (
                         <div className="px-4 pb-4 pt-1 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {/* Payment Status Filter */}
+                            {isClientOrMerchant && (
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-money-bill-wave text-emerald-500"></i>
@@ -2452,7 +2471,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                             </div>
 
+                            )}
+
                             {/* Device Type Filter */}
+                            {isClientOrMerchant && (
                             <div>
                                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                     <i className="fa-solid fa-users-gear text-blue-500"></i>
@@ -2475,6 +2497,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     ))}
                                 </div>
                             </div>
+                            )}
 
                             {currentSheetId === 'account_data' && (
                                 <div>
@@ -2503,7 +2526,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                             )}
 
-                            {(isClientOrMerchant || currentSheetId === 'account_data') && (
+                            {(isClientOrMerchant || currentSheetId === 'account_data' || isTrashSheet) && (
                                 <div>
                                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-2 flex items-center gap-1">
                                         <i className="fa-solid fa-user-clock text-rose-500"></i>
@@ -3814,6 +3837,85 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
+            {/* Modal: No Renew */}
+            {noRenewModal.open && noRenewModal.record && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <form onSubmit={submitNoRenewModal} className="bg-white dark:bg-slate-900 rounded-3xl max-w-md w-full shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden">
+                        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-300 flex items-center justify-center border border-rose-200 dark:border-rose-800">
+                                    <i className="fa-solid fa-user-xmark"></i>
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-sm text-slate-900 dark:text-white">Mark as No Renew</h3>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">Return slot to stock and move customer to archive</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={closeNoRenewModal}
+                                disabled={noRenewModal.isSubmitting}
+                                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition disabled:opacity-50"
+                            >
+                                <i className="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-3 space-y-2 text-xs">
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold">Customer</span>
+                                    <span className="font-black text-slate-800 dark:text-slate-100 truncate">{noRenewModal.record.name || '-'}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold">Phone</span>
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200 truncate">{noRenewModal.record.phone || '-'}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-3">
+                                    <span className="text-slate-500 dark:text-slate-400 font-bold">Account</span>
+                                    <span className="font-mono font-bold text-slate-700 dark:text-slate-200 truncate">{noRenewModal.record.selectedAccount || noRenewModal.record.email || '-'}</span>
+                                </div>
+                            </div>
+
+                            <label className="block">
+                                <span className="block text-xs font-black text-slate-700 dark:text-slate-300 mb-2">New Adobe Password</span>
+                                <input
+                                    type="text"
+                                    value={noRenewModal.newPassword}
+                                    onChange={event => setNoRenewModal(prev => ({ ...prev, newPassword: event.target.value }))}
+                                    className="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 px-3 py-2.5 text-sm font-mono text-slate-800 dark:text-slate-100 outline-none focus:border-rose-500 focus:ring-4 focus:ring-rose-100 dark:focus:ring-rose-950/40 transition"
+                                    placeholder="Leave empty to keep current password"
+                                    autoFocus
+                                />
+                            </label>
+
+                            <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/25 p-3 text-[11px] font-bold text-amber-800 dark:text-amber-200 flex gap-2">
+                                <i className="fa-solid fa-triangle-exclamation mt-0.5"></i>
+                                <span>This will free the account slot, update the account password if entered, and move this customer to archive.</span>
+                            </div>
+                        </div>
+
+                        <div className="px-5 py-4 bg-slate-50 dark:bg-slate-950/60 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={closeNoRenewModal}
+                                disabled={noRenewModal.isSubmitting}
+                                className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold transition disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={noRenewModal.isSubmitting}
+                                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-black shadow-sm transition disabled:opacity-60 flex items-center gap-2"
+                            >
+                                {noRenewModal.isSubmitting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-box-archive"></i>}
+                                <span>Confirm No Renew</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
             {/* Modal: Add / Edit Single Record */}
             {showAddModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
