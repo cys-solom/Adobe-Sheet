@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
 import { sheetsAPI } from '../services/api';
-import { SHEETS_CHANGED, sellCloudAccount, syncAccountUsageFromCloudSheets } from '../services/sheetSync';
+import { SHEETS_CHANGED, sellCloudAccount, syncAccountUsageFromCloudSheets, markSubscriptionNotRenewed } from '../services/sheetSync';
 import {
     DEFAULT_SHEETS,
     sanitizeRecord,
@@ -1161,6 +1161,157 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             };
         });
         if (await saveRecords(updated)) showToast('ChatGPT renewed and user count reset', 'success');
+    };
+
+    const getAvailableAdobeAccountOptions = async () => {
+        const accountRecords = await sheetsAPI.getSheetRecords('account_data');
+        return (Array.isArray(accountRecords) ? accountRecords : [])
+            .map((record, index) => sanitizeRecord(record, index))
+            .filter(account => {
+                if (!account || getAccountCategory(account) !== 'adobe') return false;
+                const currentUses = Math.max(0, Number(account.currentUses || 0));
+                const maxUses = Math.max(1, Number(account.maxUses || 2));
+                return (account.email || account.selectedAccount) && currentUses < maxUses;
+            });
+    };
+
+    const chooseRenewalAccount = async (record) => {
+        const hasSameAccount = Boolean(record.selectedAccount || record.email);
+        let mode = hasSameAccount
+            ? window.prompt('Renew account choice: 1 = same account, 2 = another stock account, 3 = keep manual data', '1')
+            : window.prompt('Renew account choice: 1 = choose stock account, 2 = keep manual data', '1');
+        if (mode === null) return null;
+        mode = String(mode || '').trim();
+
+        if ((hasSameAccount && mode === '1') || (!hasSameAccount && mode === '2')) {
+            return {
+                selectedAccount: record.selectedAccount || record.email || '',
+                email: record.email || '',
+                password: record.password || '',
+                password2: record.password2 || ''
+            };
+        }
+
+        if (hasSameAccount && mode === '3') {
+            return {
+                selectedAccount: record.selectedAccount || '',
+                email: record.email || '',
+                password: record.password || '',
+                password2: record.password2 || ''
+            };
+        }
+
+        const options = await getAvailableAdobeAccountOptions();
+        if (options.length === 0) {
+            showToast('No available stock accounts right now', 'warning');
+            return null;
+        }
+
+        const list = options.slice(0, 30).map((account, index) => {
+            const currentUses = Math.max(0, Number(account.currentUses || 0));
+            const maxUses = Math.max(1, Number(account.maxUses || 2));
+            const remaining = Math.max(0, maxUses - currentUses);
+            return `${index + 1}. ${account.email || account.selectedAccount} (${remaining}/${maxUses} free)`;
+        }).join('\n');
+        const choice = window.prompt('Choose account for renewal:\n' + list, '1');
+        if (choice === null) return null;
+        const selectedIndex = Number(choice) - 1;
+        const selected = options[selectedIndex];
+        if (!selected) {
+            showToast('Invalid account choice', 'warning');
+            return null;
+        }
+
+        return {
+            selectedAccount: selected.email || selected.selectedAccount || '',
+            email: selected.email || selected.selectedAccount || '',
+            password: selected.password || '',
+            password2: selected.password2 || ''
+        };
+    };
+
+    const buildRenewedCustomerRecord = (record, duration, accountPatch) => {
+        const { deletedAt, originSheetId, originSheetName, ...cleanRecord } = record;
+        return {
+            ...cleanRecord,
+            ...accountPatch,
+            duration: String(duration || record.duration || '').trim(),
+            startDate: getTodayPlainDate(),
+            renewalStatus: '',
+            nonRenewedAt: '',
+            releasedAccountAt: '',
+            notes: [record.notes, 'Renewed and re-entered active cycle'].filter(Boolean).join(' | '),
+            updated_at: new Date().toISOString()
+        };
+    };
+
+    const handleRenewCustomerCycle = async (record, fromArchive = false) => {
+        if (!record?.id) return;
+        const duration = window.prompt('Renewal duration:', record.duration || '1 month');
+        if (duration === null) return;
+        const accountPatch = await chooseRenewalAccount(record);
+        if (!accountPatch) return;
+
+        const targetSheetId = fromArchive ? (record.originSheetId || 'client_data') : currentSheetId;
+        try {
+            const renewedRecord = buildRenewedCustomerRecord(record, duration, accountPatch);
+            if (fromArchive) {
+                const targetRecords = await sheetsAPI.getSheetRecords(targetSheetId);
+                const updatedTarget = [renewedRecord, ...(Array.isArray(targetRecords) ? targetRecords : [])]
+                    .map((item, index) => sanitizeRecord(item, index))
+                    .filter(Boolean);
+                await sheetsAPI.saveSheetRecords(targetSheetId, updatedTarget);
+                await syncAccountUsageFromCloudSheets({ [targetSheetId]: updatedTarget });
+
+                const updatedTrash = records.filter(item => String(item.id) !== String(record.id));
+                await saveRecords(updatedTrash);
+            } else {
+                const updated = records.map(item => String(item.id) === String(record.id) ? renewedRecord : item);
+                await saveRecords(updated);
+            }
+            showToast('Customer renewed successfully', 'success');
+        } catch (error) {
+            console.error('Failed renewing customer cycle:', error);
+            showToast('Could not renew customer', 'error');
+        }
+    };
+
+    const handleMarkCustomerNotRenewedToArchive = async (record) => {
+        if (!record?.id || !isClientOrMerchant) return;
+        const newPassword = window.prompt('New Adobe password after this customer did not renew. Leave empty to keep current password:', record.password2 || '');
+        if (newPassword === null) return;
+        const confirmed = window.confirm('Mark this customer as not renewed, return their slot to stock, and move them to archive?');
+        if (!confirmed) return;
+
+        try {
+            await markSubscriptionNotRenewed({
+                sheetId: currentSheetId,
+                recordId: record.id,
+                newPassword: String(newPassword || '').trim()
+            });
+
+            const latestRecords = await sheetsAPI.getSheetRecords(currentSheetId);
+            const sanitizedLatest = (Array.isArray(latestRecords) ? latestRecords : [])
+                .map((item, index) => sanitizeRecord(item, index))
+                .filter(Boolean);
+            const markedRecord = sanitizedLatest.find(item => String(item.id) === String(record.id)) || {
+                ...record,
+                renewalStatus: 'not_renewed',
+                nonRenewedAt: new Date().toISOString(),
+                releasedAccountAt: new Date().toISOString()
+            };
+
+            await moveToTrash([markedRecord], currentSheetId, currentSheet?.name || 'Sheet');
+            const activeRecords = sanitizedLatest.filter(item => String(item.id) !== String(record.id));
+            await sheetsAPI.saveSheetRecords(currentSheetId, activeRecords);
+            await syncAccountUsageFromCloudSheets({ [currentSheetId]: activeRecords });
+            setRecords(activeRecords);
+            await refreshAllCounts();
+            showToast('Customer archived as not renewed and slot returned', 'success');
+        } catch (error) {
+            console.error('Failed archiving not-renewed customer:', error);
+            showToast('Could not archive this customer', 'error');
+        }
     };
 
     const handleToggleOfferActivated = async (id) => {
@@ -2755,7 +2906,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="تعديل"
+                                                                title="Edit"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -2764,7 +2915,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف ونقل إلى سلة المهملات"
+                                                                title="Move to archive"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
@@ -3540,19 +3691,29 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             <td className="px-1 py-1 text-center w-12">
                                                 {isTrashSheet ? (
                                                     <div className="flex items-center justify-center gap-1">
+                                                        {['client_data', 'merchant_data'].includes(rec.originSheetId) && (
+                                                            <button
+                                                                onClick={() => handleRenewCustomerCycle(rec, true)}
+                                                                className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
+                                                                title="Renew archived customer and return to active cycle"
+                                                            >
+                                                                <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                <span>Renew</span>
+                                                            </button>
+                                                        )}
                                                         <button
                                                             onClick={() => handleRestoreRecord(rec)}
                                                             className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/60 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
-                                                            title="استرداد السجل إلى شيته الأصلي"
+                                                            title="Restore to original sheet"
                                                         >
                                                             <i className="fa-solid fa-rotate-left text-[8px]"></i>
-                                                            <span>استرداد</span>
+                                                            <span>Restore</span>
                                                         </button>
                                                         {canEmptyTrash && (
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف نهائي"
+                                                                title="Delete permanently"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
@@ -3560,11 +3721,31 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     </div>
                                                 ) : (
                                                     <div className="flex items-center justify-center gap-1">
+                                                        {isClientOrMerchant && canEdit && (
+                                                            <>
+                                                                <button
+                                                                    onClick={() => handleRenewCustomerCycle(rec, false)}
+                                                                    className="px-2 py-0.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
+                                                                    title="Renew this customer on same or another account"
+                                                                >
+                                                                    <i className="fa-solid fa-rotate text-[8px]"></i>
+                                                                    <span>Renew</span>
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleMarkCustomerNotRenewedToArchive(rec)}
+                                                                    className="px-2 py-0.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-[10px] font-bold flex items-center gap-1 transition shadow-xs whitespace-nowrap"
+                                                                    title="Mark not renewed and move to archive"
+                                                                >
+                                                                    <i className="fa-solid fa-user-xmark text-[8px]"></i>
+                                                                    <span>No renew</span>
+                                                                </button>
+                                                            </>
+                                                        )}
                                                         {canEdit && (
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
                                                                 className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="تعديل"
+                                                                title="Edit"
                                                             >
                                                                 <i className="fa-solid fa-pen text-[8.5px]"></i>
                                                             </button>
@@ -3573,13 +3754,13 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
                                                                 className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
-                                                                title="حذف ونقل إلى سلة المهملات"
+                                                                title="Move to archive"
                                                             >
                                                                 <i className="fa-solid fa-trash text-[8.5px]"></i>
                                                             </button>
                                                         )}
                                                         {!canEdit && !canDelete && (
-                                                            <span className="text-[9px] text-slate-400">عرض فقط</span>
+                                                            <span className="text-[9px] text-slate-400">View only</span>
                                                         )}
                                                     </div>
                                                 )}
