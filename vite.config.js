@@ -12,6 +12,9 @@ export default defineConfig({
         chunkSizeWarningLimit: 600,
         rollupOptions: {
             output: {
+                entryFileNames: 'assets/[name].js',
+                chunkFileNames: 'assets/[name].js',
+                assetFileNames: 'assets/[name][extname]',
                 manualChunks(id) {
                     // React core
                     if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
