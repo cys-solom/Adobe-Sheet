@@ -68,31 +68,40 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
 
     const getAccountKey = (value) => String(value || '').trim().toLowerCase();
 
-    const findRelatedExpiredSubscriptions = (item) => {
+    const formatCustomerLine = (record, index = null) => {
+        const prefix = index === null ? '' : `${index + 1}. `;
+        const customerName = record.name || 'No name';
+        const phone = record.phone || 'No phone';
+        const email = record.email || 'No email';
+        const type = record.deviceType || record.saleType || 'subscription';
+        const rem = record.remInfo || calculateRemainingTime(record.startDate, record.duration, record.created_at);
+        const remaining = rem?.text || '-';
+        return `${prefix}${customerName} | ${phone} | ${email} | ${type} | ${remaining} | ${record.sheetId}`;
+    };
+
+    const findRelatedReturnableSubscriptions = (item) => {
         const selectedKey = getAccountKey(item.selectedAccount || item.email);
         if (!selectedKey) return [item];
-        return ['client_data', 'merchant_data']
+        const related = ['client_data', 'merchant_data']
             .flatMap(sheetId => (allRecordsBySheet[sheetId] || []).map(record => ({ ...record, sheetId })))
             .filter(record => {
                 if (record.deletedAt || record.renewalStatus === 'not_renewed' || record.nonRenewedAt) return false;
                 const recordKey = getAccountKey(record.selectedAccount || record.email);
                 if (recordKey !== selectedKey) return false;
                 const rem = calculateRemainingTime(record.startDate, record.duration, record.created_at);
-                return rem?.days !== null && rem.days < 0;
+                return rem?.days !== null && rem.days <= 3;
             });
+
+        return related.length > 0 ? related : [item];
     };
 
     const handleMarkNotRenewed = async (item) => {
         if (!item?.id || !item?.sheetId || !['near', 'expired'].includes(item.alertType)) return;
-        const related = findRelatedExpiredSubscriptions(item);
+        const related = findRelatedReturnableSubscriptions(item);
         let target = item;
         if (related.length > 1) {
-            const list = related.map((record, index) => {
-                const name = record.name || record.email || record.phone || record.id;
-                const type = record.deviceType || record.saleType || 'subscription';
-                return `${index + 1}. ${name} | ${type} | ${record.sheetId}`;
-            }).join('\n');
-            const choice = window.prompt(`Choose the customer who did not renew:\n${list}`, '1');
+            const list = related.map((record, index) => formatCustomerLine(record, index)).join('\n');
+            const choice = window.prompt(`Choose the customer who did not renew / return to stock:` + '\n' + list, '1');
             if (choice === null) return;
             const selectedIndex = Number(choice) - 1;
             if (!Number.isInteger(selectedIndex) || !related[selectedIndex]) {
@@ -102,7 +111,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
             target = related[selectedIndex];
         }
 
-        const newPassword = window.prompt('New Adobe password after reset. Leave empty if another customer still uses this shared account:', target.password2 || '');
+        const newPassword = window.prompt('New Adobe password after reset. Enter it to update stock, or leave empty to keep the current password:', target.password2 || '');
         if (newPassword === null) return;
         const trimmedPassword = String(newPassword || '').trim();
 
@@ -582,6 +591,30 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
                                                 </button>
                                             </div>
                                         </div>
+
+                                        {(item.name || item.phone) && (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1 border-t border-slate-100 dark:border-slate-800">
+                                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                                    <span className="text-slate-400 font-bold">Customer:</span>
+                                                    <span className="font-black text-slate-800 dark:text-slate-100 truncate" title={item.name || 'No name'}>{item.name || 'No name'}</span>
+                                                </div>
+                                                <div className="flex items-center justify-between gap-2 min-w-0">
+                                                    <span className="text-slate-400 font-bold">Phone:</span>
+                                                    <div className="flex items-center gap-1.5 dir-ltr min-w-0">
+                                                        <span className="font-mono font-black text-slate-800 dark:text-slate-100 truncate" title={item.phone || 'No phone'}>{item.phone || 'No phone'}</span>
+                                                        {item.phone && (
+                                                            <button
+                                                                onClick={() => handleCopy(item.phone, `dash_phone_${item.id}`)}
+                                                                className="text-slate-400 hover:text-indigo-600 p-0.5 transition"
+                                                                title="Copy phone"
+                                                            >
+                                                                <i className={`fa-solid ${copiedField === `dash_phone_${item.id}` ? 'fa-check text-emerald-500' : 'fa-copy'} text-[10px]`}></i>
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Passwords (if available) */}
                                         {(item.password || item.password2) && (

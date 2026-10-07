@@ -154,7 +154,7 @@ export async function markSubscriptionNotRenewed({ sheetId, recordId, newPasswor
     const updatedAccountRows = (rows.account_data || []).map(account => {
         if (!matchesAccountRecord(account, targetRecord)) return account;
         const remainingUses = getRemainingUsesForAccount(account);
-        const shouldResetPassword = remainingUses <= 0 && String(newPassword || '').trim();
+        const shouldResetPassword = Boolean(String(newPassword || '').trim());
         return {
             ...account,
             ...(shouldResetPassword ? { password2: String(newPassword).trim() } : {}),
