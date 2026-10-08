@@ -333,6 +333,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [noRenewModal, setNoRenewModal] = useState({ open: false, record: null, newPassword: '', isSubmitting: false });
     const [renewModal, setRenewModal] = useState({ open: false, record: null, fromArchive: false, duration: DURATION_ITEMS[0]?.value || '1 month', deviceType: 'shared', accountMode: 'same', selectedAccount: '', isSubmitting: false });
     const [renewStockAccounts, setRenewStockAccounts] = useState([]);
+    const [historyModal, setHistoryModal] = useState({ open: false, record: null });
 
     // Notification toast
     const [toast, setToast] = useState(null);
@@ -1299,20 +1300,68 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         };
     };
 
-    const buildRenewedCustomerRecord = (record, duration, accountPatch, deviceType) => {
+    const normalizeCustomerHistory = (record) => (
+        Array.isArray(record?.renewalHistory) ? record.renewalHistory : []
+    );
+
+    const buildCustomerHistoryEntry = (record, type = 'subscription') => {
+        const remaining = getSubscriptionRemaining(record);
+        return {
+            id: [type, record.id || 'customer', Date.now()].join('_'),
+            type,
+            name: record.name || '',
+            phone: record.phone || '',
+            account: record.selectedAccount || record.email || '',
+            email: record.email || record.selectedAccount || '',
+            duration: record.duration || '',
+            deviceType: record.deviceType || '',
+            startDate: record.startDate || '',
+            endDate: remaining?.endDate || '',
+            status: record.renewalStatus || remaining?.status || '',
+            createdAt: record.created_at || record.createdAt || '',
+            recordedAt: new Date().toISOString()
+        };
+    };
+
+    const getCustomerHistoryRows = (record) => {
+        if (!record) return [];
+        const current = {
+            ...buildCustomerHistoryEntry(record, 'current'),
+            id: 'current_' + (record.id || 'customer'),
+            recordedAt: record.updated_at || record.created_at || ''
+        };
+        return [current, ...normalizeCustomerHistory(record)];
+    };
+
+    const buildRenewedCustomerRecord = (record, duration, accountPatch, deviceType, accountMode) => {
         const { deletedAt, originSheetId, originSheetName, ...cleanRecord } = record;
         const isPersonal = deviceType === 'personal';
+        const today = getTodayPlainDate();
+        const renewalEntry = {
+            id: ['renewal', record.id || 'customer', Date.now()].join('_'),
+            type: 'renewal',
+            renewedAt: new Date().toISOString(),
+            accountMode: accountMode || '',
+            account: accountPatch.selectedAccount || accountPatch.email || '',
+            email: accountPatch.email || accountPatch.selectedAccount || '',
+            duration: String(duration || record.duration || '').trim(),
+            deviceType: isPersonal ? '\u0634\u062e\u0635\u064a' : '\u0645\u0634\u062a\u0631\u0643',
+            startDate: today,
+            status: 'renewed'
+        };
+        const previousCycle = buildCustomerHistoryEntry(record, isSubscriptionNotRenewed(record) ? 'not_renewed' : 'previous_cycle');
         return {
             ...cleanRecord,
             ...accountPatch,
             duration: String(duration || record.duration || '').trim(),
-            startDate: getTodayPlainDate(),
+            startDate: today,
             deviceType: isPersonal ? '\u0634\u062e\u0635\u064a' : '\u0645\u0634\u062a\u0631\u0643',
             accountUsageMode: isPersonal ? 'personal' : 'shared_one_device',
             saleType: isPersonal ? 'personal' : 'shared_one_device',
             renewalStatus: '',
             nonRenewedAt: '',
             releasedAccountAt: '',
+            renewalHistory: [renewalEntry, previousCycle, ...normalizeCustomerHistory(record)].filter(Boolean),
             notes: [record.notes, 'Renewed and re-entered active cycle'].filter(Boolean).join(' | '),
             updated_at: new Date().toISOString()
         };
@@ -1374,7 +1423,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         setRenewModal(prev => ({ ...prev, isSubmitting: true }));
         const targetSheetId = renewModal.fromArchive ? (record.originSheetId || 'client_data') : currentSheetId;
         try {
-            const renewedRecord = buildRenewedCustomerRecord(record, renewModal.duration, accountPatch, renewModal.deviceType);
+            const renewedRecord = buildRenewedCustomerRecord(record, renewModal.duration, accountPatch, renewModal.deviceType, renewModal.accountMode);
             if (renewModal.fromArchive) {
                 const targetRecords = await sheetsAPI.getSheetRecords(targetSheetId);
                 const updatedTarget = [renewedRecord, ...(Array.isArray(targetRecords) ? targetRecords : [])]
@@ -3076,6 +3125,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 {/* Actions */}
                                                 <td className="px-1 py-1 text-center w-12">
                                                     <div className="flex items-center justify-center gap-1">
+                                                        {isClientOrMerchant && (
+                                                            <button
+                                                                onClick={() => setHistoryModal({ open: true, record: rec })}
+                                                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
+                                                                title="Customer history"
+                                                            >
+                                                                <i className="fa-solid fa-clock-rotate-left text-[8.5px]"></i>
+                                                            </button>
+                                                        )}
                                                         {canEdit && (
                                                             <button
                                                                 onClick={() => handleOpenEdit(rec)}
@@ -3887,6 +3945,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             <i className="fa-solid fa-rotate-left text-[8px]"></i>
                                                             <span>Restore</span>
                                                         </button>
+                                                        {['client_data', 'merchant_data'].includes(rec.originSheetId) && (
+                                                            <button
+                                                                onClick={() => setHistoryModal({ open: true, record: rec })}
+                                                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
+                                                                title="Customer history"
+                                                            >
+                                                                <i className="fa-solid fa-clock-rotate-left text-[8.5px]"></i>
+                                                            </button>
+                                                        )}
                                                         {canEmptyTrash && (
                                                             <button
                                                                 onClick={() => handleDeleteRecord(rec.id)}
@@ -3918,6 +3985,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                     <span>No renew</span>
                                                                 </button>
                                                             </>
+                                                        )}
+                                                        {isClientOrMerchant && (
+                                                            <button
+                                                                onClick={() => setHistoryModal({ open: true, record: rec })}
+                                                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-slate-800 rounded transition cursor-pointer"
+                                                                title="Customer history"
+                                                            >
+                                                                <i className="fa-solid fa-clock-rotate-left text-[8.5px]"></i>
+                                                            </button>
                                                         )}
                                                         {canEdit && (
                                                             <button
@@ -3992,6 +4068,66 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
+            {/* Modal: Customer History */}
+            {historyModal.open && historyModal.record && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col">
+                        <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-10 h-10 rounded-2xl bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-300 flex items-center justify-center border border-blue-200 dark:border-blue-800">
+                                    <i className="fa-solid fa-clock-rotate-left"></i>
+                                </div>
+                                <div className="min-w-0">
+                                    <h3 className="font-black text-sm text-slate-900 dark:text-white">Customer History</h3>
+                                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">{historyModal.record.name || historyModal.record.phone || historyModal.record.email || '-'}</p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setHistoryModal({ open: false, record: null })}
+                                className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition"
+                            >
+                                <i className="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                        <div className="p-5 overflow-y-auto custom-modal-scroll space-y-3">
+                            {getCustomerHistoryRows(historyModal.record).map((entry, index) => {
+                                const markerClass = entry.type === 'current'
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+                                    : entry.type === 'renewal'
+                                        ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800'
+                                        : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700';
+                                const markerIcon = entry.type === 'current' ? 'fa-play' : entry.type === 'renewal' ? 'fa-rotate' : 'fa-clock';
+                                const entryTitle = entry.type === 'current' ? 'Current subscription' : entry.type === 'renewal' ? 'Renewal' : entry.type === 'not_renewed' ? 'No renew cycle' : 'Previous cycle';
+                                const entryDate = entry.renewedAt ? String(entry.renewedAt).slice(0, 10) : entry.recordedAt ? String(entry.recordedAt).slice(0, 10) : '-';
+                                return (
+                                    <div key={entry.id || index} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/40 p-3">
+                                        <div className="flex items-center justify-between gap-3 mb-2">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className={'w-8 h-8 rounded-xl flex items-center justify-center text-xs border ' + markerClass}>
+                                                    <i className={'fa-solid ' + markerIcon}></i>
+                                                </span>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">{entryTitle}</div>
+                                                    <div className="text-[10px] text-slate-400 font-bold">{entryDate}</div>
+                                                </div>
+                                            </div>
+                                            <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-300">{entry.status || '-'}</span>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                            <div><span className="block text-slate-400 font-bold">Start</span><b className="text-slate-700 dark:text-slate-200">{entry.startDate || '-'}</b></div>
+                                            <div><span className="block text-slate-400 font-bold">End</span><b className="text-slate-700 dark:text-slate-200">{entry.endDate || '-'}</b></div>
+                                            <div><span className="block text-slate-400 font-bold">Duration</span><b className="text-slate-700 dark:text-slate-200">{entry.duration || '-'}</b></div>
+                                            <div><span className="block text-slate-400 font-bold">Type</span><b className="text-slate-700 dark:text-slate-200">{entry.deviceType || '-'}</b></div>
+                                        </div>
+                                        <div className="mt-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate dir-ltr text-left">{entry.account || entry.email || '-'}</div>
+                                    </div>
+                                );
+                            })}                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Modal: Renew Customer */}
             {renewModal.open && renewModal.record && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
@@ -4058,8 +4194,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </p>
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { id: 'shared', label: '\\u0645\\u0634\\u062a\\u0631\\u0643', icon: 'fa-user-group' },
-                                        { id: 'personal', label: '\\u0634\\u062e\\u0635\\u064a', icon: 'fa-user-shield' },
+                                        { id: 'shared', label: '\u0645\u0634\u062a\u0631\u0643', icon: 'fa-user-group' },
+                                        { id: 'personal', label: '\u0634\u062e\u0635\u064a', icon: 'fa-user-shield' },
                                     ].map(item => (
                                         <button
                                             key={item.id}
