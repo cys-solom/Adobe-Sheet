@@ -403,6 +403,24 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         }
     };
 
+    const isSubscriptionNotRenewed = (record) => (
+        record?.renewalStatus === 'not_renewed' || Boolean(record?.nonRenewedAt)
+    );
+
+    const getSubscriptionRemaining = (record) => {
+        if (isSubscriptionNotRenewed(record)) {
+            const endedAt = record.nonRenewedAt || record.releasedAccountAt || record.updated_at || new Date().toISOString();
+            return {
+                text: '\u0627\u0646\u062a\u0647\u0649 - \u0644\u0645 \u064a\u062c\u062f\u062f',
+                status: 'not-renewed',
+                days: -999999,
+                endDate: String(endedAt).slice(0, 10),
+                startDate: record.startDate || ''
+            };
+        }
+        return calculateRemainingTime(record.startDate, record.duration, record.created_at);
+    };
+
     const migrateNotRenewedTrashRecords = async () => {
         try {
             const trashRecords = await sheetsAPI.getSheetRecords('trash_data');
@@ -1769,10 +1787,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         sourceRecords.forEach(r => {
             if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return;
+            if (isClientOrMerchant && isSubscriptionNotRenewed(r)) return;
 
             const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                 ? getAccountReminder(r)
-                : calculateRemainingTime(r.startDate, r.duration, r.created_at);
+                : getSubscriptionRemaining(r);
 
             if (!rem || rem.status === 'none') return;
 
@@ -1833,7 +1852,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
-                    : calculateRemainingTime(r.startDate, r.duration, r.created_at);
+                    : getSubscriptionRemaining(r);
                 return rem.days !== null && rem.days >= 0 && rem.days <= 3 && rem.status !== 'lifetime';
             });
         } else if (expiryFilter === 'expired') {
@@ -1841,14 +1860,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
-                    : calculateRemainingTime(r.startDate, r.duration, r.created_at);
+                    : getSubscriptionRemaining(r);
                 return rem.days !== null && rem.days < 0;
             });
         } else if (expiryFilter === 'active') {
             result = result.filter(r => {
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
-                    : calculateRemainingTime(r.startDate, r.duration, r.created_at);
+                    : getSubscriptionRemaining(r);
                 return rem.days > 3 || rem.status === 'lifetime';
             });
         }
@@ -1858,7 +1877,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             result = result.filter(r => {
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
-                    : calculateRemainingTime(r.startDate, r.duration, r.created_at);
+                    : getSubscriptionRemaining(r);
                 return (
                     String(r.email || '').toLowerCase().includes(q) ||
                     String(r.name || '').toLowerCase().includes(q) ||
@@ -1936,8 +1955,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return 0;
             }
             if (sortBy.field === 'remainingDays' || sortBy.field === 'startDate') {
-                const daysA = calculateRemainingTime(a.startDate, a.duration, a.created_at).days ?? -999999;
-                const daysB = calculateRemainingTime(b.startDate, b.duration, b.created_at).days ?? -999999;
+                const daysA = getSubscriptionRemaining(a).days ?? -999999;
+                const daysB = getSubscriptionRemaining(b).days ?? -999999;
                 if (daysA < daysB) return sortBy.asc ? -1 : 1;
                 if (daysA > daysB) return sortBy.asc ? 1 : -1;
                 return 0;
@@ -3387,7 +3406,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                     {/* Remaining Time (المدة المتبقية) */}
                                                     <td className="px-1.5 py-1 font-medium">
                                                         {(() => {
-                                                            const remaining = calculateRemainingTime(rec.startDate, rec.duration, rec.created_at);
+                                                            const remaining = getSubscriptionRemaining(rec);
                                                             if (remaining.status === 'none') {
                                                                 return <span className="text-slate-300 dark:text-slate-600">-</span>;
                                                             }
@@ -3395,6 +3414,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             const badgeStyles = {
                                                                 lifetime: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border-purple-200/70 dark:border-purple-800/60',
                                                                 expired: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/70 dark:border-rose-800/60',
+                                                                'not-renewed': 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700',
                                                                 'expiring-today': 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 border-red-200/70 dark:border-red-800/60 animate-pulse',
                                                                 urgent: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/70 dark:border-amber-800/60',
                                                                 warning: 'bg-yellow-50 dark:bg-yellow-950/40 text-yellow-700 dark:text-yellow-300 border-yellow-200/70 dark:border-yellow-800/60',
@@ -3404,6 +3424,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             const badgeIcon = {
                                                                 lifetime: 'fa-solid fa-infinity text-[8px] text-purple-500',
                                                                 expired: 'fa-solid fa-circle-exclamation text-[8px] text-rose-500',
+                                                                'not-renewed': 'fa-solid fa-circle-xmark text-[8px] text-slate-500',
                                                                 'expiring-today': 'fa-solid fa-triangle-exclamation text-[8px] text-red-500',
                                                                 urgent: 'fa-solid fa-triangle-exclamation text-[8px] text-amber-500',
                                                                 warning: 'fa-regular fa-clock text-[8px] text-yellow-500',
@@ -3412,7 +3433,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                                             const tooltip = remaining.status === 'lifetime'
                                                                 ? 'اشتراك مدى الحياة'
-                                                                : `تاريخ البداية: ${remaining.startDate || '-'} | تاريخ الانتهاء: ${remaining.endDate || '-'}`;
+                                                                : remaining.status === 'not-renewed'
+                                                                    ? '\u062a\u0645 \u0625\u0646\u0647\u0627\u0621 \u0627\u0644\u0627\u0634\u062a\u0631\u0627\u0643 \u0644\u0623\u0646 \u0627\u0644\u0639\u0645\u064a\u0644 \u0644\u0645 \u064a\u062c\u062f\u062f'
+                                                                    : `تاريخ البداية: ${remaining.startDate || '-'} | تاريخ الانتهاء: ${remaining.endDate || '-'}`;
 
                                                             return (
                                                                 <div className="flex items-center gap-1" title={tooltip}>
