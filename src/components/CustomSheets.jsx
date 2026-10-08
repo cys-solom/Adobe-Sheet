@@ -403,10 +403,77 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         }
     };
 
+    const migrateNotRenewedTrashRecords = async () => {
+        try {
+            const trashRecords = await sheetsAPI.getSheetRecords('trash_data');
+            const trashList = (Array.isArray(trashRecords) ? trashRecords : [])
+                .map((item, index) => sanitizeRecord(item, index))
+                .filter(Boolean);
+            const isNotRenewedTrashRecord = (record) => (
+                record.renewalStatus === 'not_renewed' || Boolean(record.nonRenewedAt)
+            );
+            const hasCustomerLikeData = (record) => Boolean(
+                record.name || record.customerName || record.phone || record.selectedAccount || record.renewalStatus
+            );
+            const getRestoreTargetId = (record) => (
+                ['client_data', 'merchant_data'].includes(record.originSheetId)
+                    ? record.originSheetId
+                    : 'client_data'
+            );
+            const shouldRestore = (record) => (
+                isNotRenewedTrashRecord(record)
+                && (['client_data', 'merchant_data'].includes(record.originSheetId) || hasCustomerLikeData(record))
+            );
+            const recordsToRestore = trashList.filter(shouldRestore);
+            if (recordsToRestore.length === 0) return false;
+
+            const byTarget = recordsToRestore.reduce((groups, record) => {
+                const targetId = getRestoreTargetId(record);
+                if (!groups[targetId]) groups[targetId] = [];
+                groups[targetId].push(record);
+                return groups;
+            }, {});
+
+            const restoredIds = new Set(recordsToRestore.map(record => String(record.id)));
+            const extraRows = {};
+            for (const targetId of Object.keys(byTarget)) {
+                const existingTarget = await sheetsAPI.getSheetRecords(targetId);
+                const existingList = (Array.isArray(existingTarget) ? existingTarget : [])
+                    .map((item, index) => sanitizeRecord(item, index))
+                    .filter(Boolean);
+                const existingIds = new Set(existingList.map(item => String(item.id)));
+                const cleaned = byTarget[targetId]
+                    .filter(record => !existingIds.has(String(record.id)))
+                    .map(record => {
+                        const { deletedAt, originSheetId, originSheetName, ...cleanRecord } = record;
+                        return { ...cleanRecord, updated_at: new Date().toISOString() };
+                    });
+                const updatedTarget = [...cleaned, ...existingList]
+                    .map((item, index) => sanitizeRecord(item, index))
+                    .filter(Boolean);
+                await sheetsAPI.saveSheetRecords(targetId, updatedTarget);
+                extraRows[targetId] = updatedTarget;
+            }
+
+            const updatedTrash = trashList
+                .filter(record => !restoredIds.has(String(record.id)))
+                .map((item, index) => sanitizeRecord(item, index))
+                .filter(Boolean);
+            await sheetsAPI.saveSheetRecords('trash_data', updatedTrash);
+            extraRows.trash_data = updatedTrash;
+            await syncAccountUsageFromCloudSheets(extraRows);
+            return true;
+        } catch (error) {
+            console.error('Failed migrating not-renewed trash records:', error);
+            return false;
+        }
+    };
+
     // Load records whenever currentSheetId changes with automatic row sanitization
     const loadCurrentSheetData = async () => {
         try {
             refreshAvailableAccounts();
+            await migrateNotRenewedTrashRecords();
             const cloudRecords = await sheetsAPI.getSheetRecords(currentSheetId);
             if (cloudRecords && Array.isArray(cloudRecords)) {
                 const sanitized = cloudRecords.map((item, idx) => sanitizeRecord(item, idx)).filter(Boolean);
@@ -447,6 +514,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         window.addEventListener(SHEETS_CHANGED, onSheetsChanged);
         const interval = setInterval(async () => {
             try {
+                await migrateNotRenewedTrashRecords();
                 const cloudRecords = await sheetsAPI.getSheetRecords(currentSheetId);
                 if (cloudRecords && Array.isArray(cloudRecords)) {
                     const sanitized = cloudRecords.map((item, idx) => sanitizeRecord(item, idx)).filter(Boolean);
