@@ -1353,18 +1353,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 releasedAccountAt: latestMarked?.releasedAccountAt || new Date().toISOString()
             };
 
-            await moveToTrash([markedRecord], currentSheetId, currentSheet?.name || 'Sheet');
-            const activeRecords = sanitizedLatest.filter(item => String(item.id) !== String(record.id));
-            await sheetsAPI.saveSheetRecords(currentSheetId, activeRecords);
+            const updatedRecords = sanitizedLatest.map(item => String(item.id) === String(record.id) ? markedRecord : item);
+            await sheetsAPI.saveSheetRecords(currentSheetId, updatedRecords);
             await syncAccountUsageFromCloudSheets({
-                [currentSheetId]: activeRecords,
+                [currentSheetId]: updatedRecords,
                 ...(Array.isArray(result?.accounts) ? { account_data: result.accounts } : {})
             });
             if (Array.isArray(result?.accounts)) setAvailableAccounts(result.accounts);
-            setRecords(activeRecords);
+            setRecords(updatedRecords);
             await refreshAllCounts();
             setNoRenewModal({ open: false, record: null, newPassword: '', isSubmitting: false });
-            showToast('Customer archived as not renewed and slot returned', 'success');
+            setRenewalFilter('not_renewed');
+            setShowAdvancedFilters(true);
+            showToast('Customer marked as not renewed and account returned to stock', 'success');
         } catch (error) {
             console.error('Failed archiving not-renewed customer:', error);
             setNoRenewModal(prev => ({ ...prev, isSubmitting: false }));
@@ -1973,6 +1974,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         const withBothPasswords = statRecords.filter(r => r.password && r.password2).length;
         const withEmail = statRecords.filter(r => r.email).length;
         const withReminder = statRecords.filter(r => r.reminderDays && parseInt(r.reminderDays) > 0).length;
+        const notRenewedCount = statRecords.filter(r => r.renewalStatus === 'not_renewed' || Boolean(r.nonRenewedAt)).length;
         return {
             total,
             withInvoices,
@@ -1982,6 +1984,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             withBothPasswords,
             withEmail,
             withReminder,
+            notRenewedCount,
             nearCount: alertGroups.nearRenewal.length,
             expiredCount: alertGroups.expired.length
         };
@@ -2464,6 +2467,27 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 )}
             </div>
 
+            {isClientOrMerchant && (
+                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-rose-200/80 dark:border-rose-900/50 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 flex items-center justify-center border border-rose-200 dark:border-rose-800">
+                            <i className="fa-solid fa-user-clock"></i>
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-black text-slate-800 dark:text-white">{'\u0627\u0644\u0646\u0627\u0633 \u0627\u0644\u0644\u064a \u0645\u062c\u062f\u062f\u062a\u0634'}</p>
+                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Customers stay here, not in trash</p>
+                        </div>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={() => { setRenewalFilter('not_renewed'); setShowAdvancedFilters(true); setCurrentPage(1); }}
+                        className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-xs font-black transition ${renewalFilter === 'not_renewed' ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-950/50'}`}
+                    >
+                        <i className="fa-solid fa-filter"></i>
+                        <span>{stats.notRenewedCount || 0}</span>
+                    </button>
+                </div>
+            )}
             {/* Advanced Filters Panel */}
             {(isClientOrMerchant || currentSheetId === 'account_data' || isTrashSheet) && (
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200/80 dark:border-slate-800 overflow-hidden">
