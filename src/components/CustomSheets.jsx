@@ -5490,6 +5490,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                             </div>
                         </form>
+                        </div>
                     </div>
                 </div>
             )}
