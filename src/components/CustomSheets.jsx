@@ -3,6 +3,7 @@ import EmailLookup from './EmailLookup';
 import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
 import { saleKeysForAccount } from '../services/accountLookup';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
 import { useConfirm } from './ConfirmDialog';
@@ -5409,7 +5410,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             )}
 
             {/* Modal: Bulk Add */}
-            {showBulkModal && (
+            {showBulkModal && createPortal((
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
                     <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[calc(100vh-2rem)] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden p-6">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
@@ -5493,7 +5494,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </div>
                     </div>
                 </div>
-            )}
+            ), document.body)}
 
             {/* Modal: Rename Sheet */}
             {showRenameModal && (
