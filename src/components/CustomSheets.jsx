@@ -5431,7 +5431,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </button>
                         </div>
 
-                        <div className="flex-1 min-h-0 overflow-y-auto custom-modal-scroll space-y-4 pr-1">`r`n                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                        <div className="flex-1 min-h-0 overflow-y-auto custom-modal-scroll space-y-4 pr-1">
+                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
                             <p className="font-bold text-slate-800 dark:text-slate-200">{adobeBulk ? 'بيانات الحسابات' : 'الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):'}</p>
                             {adobeBulk ? <div className="font-mono text-xs" dir="ltr">HD05095400044EEG<br />****4774<br />adobe@example.com<br />student@university.edu.eg</div> : isClientOrMerchant ? (
                                 <>
