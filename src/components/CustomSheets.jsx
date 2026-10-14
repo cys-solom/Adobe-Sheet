@@ -5499,7 +5499,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 disabled={bulkSaving}
                                 value={bulkText}
                                 onChange={(e) => setBulkText(e.target.value)}
-                                placeholder={adobeBulk ? 'رقم الفاتورة\nالفيزا\nإيميل Adobe\nإيميل الجامعة' : 'الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً...'}
+                                placeholder={adobeBulk ? 'user1@example.com Password1\nuser2@example.com Password2' : 'الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً...'}
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dir-ltr text-left"
                             />
 

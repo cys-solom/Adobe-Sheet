@@ -7,7 +7,16 @@ export function parseAdobeAccounts(input) {
     const errors = [];
     for (let index = 0; index < lines.length;) {
         const line = lines[index];
-        if (isAccountEmail(line)) {
+        const pair = line.match(/^([^\s@:|,]+@[^\s@:|,]+\.[^\s@:|,]+)(?:\s+|[:|,])(.+)$/);
+        if (pair && isAccountEmail(pair[1])) {
+            const password = pair[2].trim();
+            if (!password) {
+                errors.push('باسورد أدوبي ناقص عند السطر: ' + (index + 1));
+                break;
+            }
+            records.push({ email: pair[1], password2: password, invoiceNumber: '', visa: '', visaAccount: '' });
+            index++;
+        } else if (isAccountEmail(line)) {
             records.push({ email: line, password2: DEFAULT_ADOBE_PASSWORD, invoiceNumber: '', visa: '', visaAccount: '' });
             index++;
         } else if (lines[index + 1] && isAccountEmail(lines[index + 2]) && isAccountEmail(lines[index + 3])) {
