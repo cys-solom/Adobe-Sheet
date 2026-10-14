@@ -4329,7 +4329,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
 
                                 {renewModal.accountMode === 'stock' && (
-                                    <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto custom-modal-scroll pr-1">
+                                    <div className="sticky top-0 z-20 grid grid-cols-1 gap-2 max-h-56 overflow-y-auto custom-modal-scroll pr-1 bg-white/95 dark:bg-slate-900/95 py-1">
                                         {renewStockAccounts.length > 0 ? renewStockAccounts.map(account => {
                                             const maxUses = Math.max(1, Number(account.maxUses || 2));
                                             const currentUses = Math.max(0, Number(account.currentUses || 0));
@@ -4491,7 +4491,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             {/* Scrollable Form Body with visible scrollbar on the left side */}
                             <div className="flex-1 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
                             {currentSheetId === 'client_data' && (
-                                <div className="rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50/60 dark:bg-purple-950/20 p-3 space-y-3">
+                                <div className="sticky top-0 z-30 -mx-2 rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50/95 dark:bg-purple-950/95 backdrop-blur-md p-3 space-y-3 shadow-lg shadow-purple-900/10">
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
