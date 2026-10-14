@@ -1,0 +1,99 @@
+/* Shared workspace controls and body-level dialogs. */
+:root {
+  --ui-canvas: #f5f6f8;
+  --ui-panel: #ffffff;
+  --ui-line: #dce1e7;
+  --ui-ink: #20262e;
+  --ui-muted: #626d79;
+  --ui-focus: #0f766e;
+}
+html.dark {
+  --ui-canvas: #151719;
+  --ui-panel: #202326;
+  --ui-line: #3a4046;
+  --ui-ink: #f0f2f4;
+  --ui-muted: #aab3bc;
+  color-scheme: dark;
+}
+.service-workspace { background: var(--ui-canvas) !important; color: var(--ui-ink); }
+.service-workspace :is(h1,h2,h3,button,th),
+body > .fixed :is(h1,h2,h3,button) { letter-spacing: 0; }
+.workspace-topbar { padding-block: 12px 18px; border-color: var(--ui-line); }
+.workspace-brand { font-size: 20px; color: var(--ui-ink) !important; }
+.sync-indicator { border-radius: 6px; font-weight: 600; }
+.service-workspace aside { background: #202528 !important; box-shadow: none !important; }
+.service-workspace aside nav { padding: 12px; }
+.service-workspace aside nav button {
+  min-height: 44px;
+  border-radius: 6px;
+  box-shadow: none !important;
+  transform: none !important;
+  background-image: none;
+}
+.service-workspace aside nav button.text-white { background-color: #0f766e !important; }
+.service-workspace aside .vip-animated-text {
+  background: none;
+  -webkit-text-fill-color: #f0f4f5;
+  color: #f0f4f5;
+  animation: none;
+}
+.service-workspace .vip-logo-badge { animation: none; background: #0f766e; box-shadow: none; border-radius: 8px; }
+.service-workspace .logo-shine-sweep { display: none; }
+.service-workspace main :is(.rounded-3xl,.rounded-2xl),
+body > .fixed :is(.rounded-3xl,.rounded-2xl) { border-radius: 8px; }
+.service-workspace main :is(.shadow-lg,.shadow-xl,.shadow-2xl) {
+  box-shadow: 0 1px 3px #18212b0d !important;
+}
+.service-workspace button, body > .fixed button { border-radius: 6px; font-weight: 700; }
+.service-workspace button:focus-visible,
+body > .fixed button:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
+.service-workspace button:disabled,
+body > .fixed button:disabled { opacity: .5; cursor: not-allowed; }
+.service-workspace :is(input,select,textarea):not([type=checkbox]):not([type=radio]),
+body > .fixed :is(input,select,textarea):not([type=checkbox]):not([type=radio]) {
+  border: 1px solid var(--ui-line);
+  border-radius: 6px;
+  box-shadow: none;
+  line-height: 1.6;
+}
+.service-workspace :is(input,select):not([type=checkbox]):not([type=radio]),
+body > .fixed :is(input,select):not([type=checkbox]):not([type=radio]) { min-height: 40px; }
+.service-workspace :is(input,select,textarea):focus,
+body > .fixed :is(input,select,textarea):focus { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+input[type=checkbox], input[type=radio] { accent-color: var(--ui-focus); }
+.service-workspace table { font-variant-numeric: tabular-nums; }
+.service-workspace th { font-size: 12px; letter-spacing: 0; color: var(--ui-muted); }
+.service-workspace td { border-color: var(--ui-line); }
+.service-workspace tbody tr:hover { background: #0f766e08; }
+/* A persistent transform traps descendant fixed overlays inside the page. */
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp { from { opacity: 0; } to { opacity: 1; } }
+.fixed.inset-0:has(> :is(form,div).shadow-2xl) {
+  height: 100dvh !important;
+  padding: 16px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.fixed.inset-0 > :is(form,div).shadow-2xl {
+  max-height: calc(100dvh - 32px);
+  border-radius: 8px;
+}
+body:has(.fixed.inset-0 > :is(form,div).shadow-2xl) { overflow: hidden; }
+html.dark .service-workspace :is(.bg-white,.bg-slate-50,.bg-slate-100),
+html.dark body > .fixed :is(.bg-white,.bg-slate-50,.bg-slate-100) { background-color: var(--ui-panel) !important; }
+html.dark .service-workspace :is(.text-slate-500,.text-slate-600) { color: var(--ui-muted) !important; }
+html.dark .service-workspace :is(.border-slate-100,.border-slate-200) { border-color: var(--ui-line) !important; }
+html.dark .service-workspace tbody tr:hover { background: #2b3435; }
+html.dark :is(.service-workspace, body > .fixed) [class~='bg-slate-50/80'] {
+  background-color: var(--ui-panel) !important;
+}
+html.dark :is(.service-workspace, body > .fixed) input::placeholder,
+html.dark :is(.service-workspace, body > .fixed) textarea::placeholder { color: #87939f !important; }
+@media (max-width: 640px) {
+  .workspace-topbar { padding-block: 6px 12px; }
+  .service-workspace main { padding-inline: 12px; }
+  .service-workspace :is(input,select,textarea),
+  body > .fixed :is(input,select,textarea) { font-size: 16px; }
+  .fixed.inset-0 > :is(form,div).shadow-2xl { width: 100%; }
+  .mobile-navigation button { min-height: 48px; }
+}

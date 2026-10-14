@@ -1,6 +1,7 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.jsx'
 import './index.css'
+import './interface.css'
 import '@fortawesome/fontawesome-free/css/all.min.css'
 
 
