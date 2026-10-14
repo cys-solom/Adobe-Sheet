@@ -71,7 +71,8 @@ export default defineConfig({
     server: {
         host: true,
         port: 5173,
-        strictPort: false, // allow fallback to another port if 5173 is busy
+        strictPort: true,
+        hmr: { clientPort: 5173 },
         open: false,
     },
     optimizeDeps: {

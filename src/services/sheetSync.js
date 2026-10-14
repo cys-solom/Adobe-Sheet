@@ -1,3 +1,4 @@
+import { clearSoldGroupBadge } from './accountLookup';
 import { supabase, isConfigured } from '../lib/supabase';
 
 export const SHEETS_CHANGED = 'servicehub:sheets-changed';
@@ -89,7 +90,7 @@ export function recalculateAccountUsage(accountRecords = [], activeSaleRecords =
         const maxUses = Math.max(1, Number(acc.maxUses || 2));
         const currentUses = Math.min(maxUses, Math.max(0, merged.uses));
         return {
-            ...acc,
+            ...clearSoldGroupBadge(acc, activeSaleRecords),
             currentUses,
             maxUses,
             accountUsageStatus: getAccountRecordStatus(currentUses, maxUses, merged.hasPersonalSale),

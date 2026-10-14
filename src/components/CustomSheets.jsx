@@ -1,3 +1,7 @@
+import { DEFAULT_ADOBE_PASSWORD, isAccountEmail, parseAdobeAccounts } from '../utils/adobeImport';
+import EmailLookup from './EmailLookup';
+import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
+import { saleKeysForAccount } from '../services/accountLookup';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext';
@@ -319,6 +323,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [currentPage, setCurrentPage] = useState(1);
     const [sortBy, setSortBy] = useState({ field: 'created_at', asc: false });
     const [bulkText, setBulkText] = useState('');
+    const [bulkSaving, setBulkSaving] = useState(false);
+    const bulkPreview = useMemo(() => parseAdobeAccounts(bulkText), [bulkText]);
     const [isDurationDropdownOpen, setIsDurationDropdownOpen] = useState(false);
     const durationDropdownRef = useRef(null);
     const [expiryFilter, setExpiryFilter] = useState('all'); // 'all', 'near', 'expired', 'active'
@@ -328,8 +334,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [deviceFilter, setDeviceFilter] = useState('all'); // advanced: all, جهاز, جهازين
     const [renewalFilter, setRenewalFilter] = useState('all');
     const [accountStockFilter, setAccountStockFilter] = useState('all');
+    const [groupBusy, setGroupBusy] = useState(false);
+    const [groupFilter, setGroupFilter] = useState('all');
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
     const [activeAccountCategory, setActiveAccountCategory] = useState('adobe');
+    const adobeBulk = currentSheetId === 'account_data' && activeAccountCategory === 'adobe';
     const [noRenewModal, setNoRenewModal] = useState({ open: false, record: null, newPassword: '', isSubmitting: false });
     const [renewModal, setRenewModal] = useState({ open: false, record: null, fromArchive: false, duration: DURATION_ITEMS[0]?.value || '1 month', deviceType: 'shared', accountMode: 'same', selectedAccount: '', isSubmitting: false });
     const [renewStockAccounts, setRenewStockAccounts] = useState([]);
@@ -390,6 +399,23 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     // Stored accounts loaded from account_data for dropdown selection
     const [availableAccounts, setAvailableAccounts] = useState([]);
+
+    const markGroupAccounts = async (ids, posted) => {
+        if (!canEdit || groupBusy || !ids.length) return;
+        setGroupBusy(true);
+        try {
+            const sheets = await readCloudSheets();
+            const sales = [...(sheets.client_data || []), ...(sheets.merchant_data || [])];
+            const updated = (sheets.account_data || []).map(account => ids.map(String).includes(String(account.id))
+                ? { ...account, postedToGroup: posted, groupPostedAt: posted ? new Date().toISOString() : '',
+                    groupSaleKeys: posted ? saleKeysForAccount(account, sales) : [], updated_at: new Date().toISOString() }
+                : account);
+            await writeCloudSheet('account_data', updated);
+            setRecords(updated);
+            showToast(posted ? 'تم وضع علامة الجروب' : 'تم إزالة علامة الجروب', 'success');
+        } catch { showToast('تعذر حفظ علامة الجروب', 'error'); }
+        finally { setGroupBusy(false); }
+    };
 
     const refreshAvailableAccounts = async () => {
         try {
@@ -831,8 +857,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 return;
             }
         } else if (currentSheetId === 'account_data') {
-            if (!formData.email && !formData.password && !formData.password2) {
-                showToast('يرجى إدخال البريد الإلكتروني أو كلمة المرور على الأقل', 'warning');
+            if (!isAccountEmail(formData.email)) {
+                showToast('يرجى إدخال إيميل صحيح', 'warning');
                 return;
             }
         } else if (currentSheetId === 'reminders_data') {
@@ -875,7 +901,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         } : currentSheetId === 'account_data' ? {
             email: formData.email,
             password: formData.password,
-            password2: accountCategory === 'adobe' ? (formData.password2 || 'Service2030@') : '',
+            password2: accountCategory === 'adobe' ? (formData.password2.trim() || editingRecord?.password2 || DEFAULT_ADOBE_PASSWORD) : '',
             invoiceNumber: formData.invoiceNumber || '',
             visa: formData.visa || '',
             visaAccount: formData.visaAccount || '',
@@ -964,6 +990,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             if ((currentSheetId === 'client_data' || currentSheetId === 'merchant_data') && accountEntryMode === 'available') {
                 const selectedAcc = findSelectedAvailableAccount();
                 await sellCloudAccount(newRecord, selectedAcc?.id, currentSheetId);
+            } else if (currentSheetId === 'account_data') {
+                const sheets = await readCloudSheets();
+                const key = formData.email.trim().toLowerCase();
+                const duplicate = Object.values(sheets).flat().some(row => row && String(row.email || '').trim().toLowerCase() === key);
+                if (duplicate) { showToast('الإيميل مسجل بالفعل. استخدم تعديل الحساب للحفاظ على بياناته', 'warning'); return; }
+                if (!await saveRecords([{ ...newRecord, email: formData.email.trim() }, ...(sheets.account_data || [])])) return;
             } else if (!await saveRecords([newRecord, ...records])) return;
             showToast('تم إضافة السجل الجديد بنجاح ✓', 'success');
         }
@@ -1211,6 +1243,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             return {
                 ...r,
                 currentUses,
+                ...(currentUses > Number(r.currentUses || 0) ? { postedToGroup: false, groupSaleKeys: [] } : {}),
                 maxUses,
                 accountUsageStatus,
                 updated_at: new Date().toISOString()
@@ -1559,9 +1592,35 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     };
 
     // Bulk Add from textarea (supports various delimiters: tab, colon, comma, pipe)
-    const handleBulkAddSubmit = (e) => {
+    const handleBulkAddSubmit = async (e) => {
         e.preventDefault();
-        if (!bulkText.trim()) return;
+        if (!bulkText.trim() || bulkSaving) return;
+        if (adobeBulk) {
+            if (bulkPreview.errors.length || !bulkPreview.records.length) {
+                showToast(bulkPreview.errors[0] || 'أدخل إيميلات صالحة', 'warning');
+                return;
+            }
+            setBulkSaving(true);
+            try {
+                const sheets = await readCloudSheets();
+                const existing = sheets.account_data || [];
+                const known = new Set(Object.values(sheets).flat().filter(Boolean).map(row => String(row.email || '').trim().toLowerCase()));
+                const added = [];
+                for (const item of bulkPreview.records) {
+                    const key = item.email.toLowerCase();
+                    if (known.has(key)) continue;
+                    known.add(key);
+                    added.push({ ...item, id: crypto.randomUUID(), accountCategory: 'adobe',
+                        currentUses: 0, maxUses: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
+                }
+                if (added.length && !await saveRecords([...added, ...existing])) return;
+                showToast('تمت إضافة ' + added.length + ' حساب، وتخطي ' + (bulkPreview.records.length - added.length) + ' مكرر', 'success');
+                setBulkText('');
+                setShowBulkModal(false);
+            } catch { showToast('تعذر حفظ الحسابات. البيانات ما زالت موجودة للمحاولة مرة أخرى', 'error'); }
+            finally { setBulkSaving(false); }
+            return;
+        }
 
         const lines = bulkText.split('\n').map(l => l.trim()).filter(Boolean);
         const newItems = [];
@@ -1866,6 +1925,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     // Filter & Search (bulletproof against numbers and nulls)
     const filteredRecords = useMemo(() => {
         let result = records;
+        if (currentSheetId === 'account_data' && groupFilter !== 'all') {
+            result = result.filter(record => groupFilter === 'posted' ? record.postedToGroup : !record.postedToGroup);
+        }
 
         if (currentSheetId === 'account_data') {
             result = result.filter(r => getAccountCategory(r) === activeAccountCategory);
@@ -2019,7 +2081,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         });
 
         return result;
-    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId, activeAccountCategory, paymentFilter, deviceFilter, renewalFilter, accountStockFilter, isClientOrMerchant, isTrashSheet]);
+    }, [records, searchTerm, sortBy, expiryFilter, offerReminderFilter, currentSheetId, activeAccountCategory, paymentFilter, deviceFilter, renewalFilter, accountStockFilter, isClientOrMerchant, isTrashSheet, groupFilter]);
 
     // Pagination
     const totalPages = Math.ceil(filteredRecords.length / pageSize) || 1;
@@ -2395,7 +2457,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                             contactChannel: 'واتساب',
                                             email: '',
                                             password: currentSheetId === 'reminders_data' ? '🔴 عاجل جداً' : '',
-                                            password2: '',
+                                            password2: activeAccountCategory === 'adobe' ? DEFAULT_ADOBE_PASSWORD : '',
                                             duration: '',
                                             startDate: new Date().toISOString().slice(0, 10),
                                             deviceType: 'مشترك',
@@ -2428,6 +2490,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     </div>
                 </div>
 
+                <div className="flex flex-wrap items-center gap-2 py-3">
+                    <EmailLookup sheetsList={sheetsList} />
+                    {currentSheetId === 'account_data' && activeAccountCategory === 'adobe' && canAdd && <button type="button" onClick={() => { setBulkText(''); setShowBulkModal(true); }} className="border rounded-lg px-3 py-2 text-xs font-bold"><i className="fa-solid fa-list ml-1" />إضافة إيميلات بالجملة</button>}
+                    {currentSheetId === 'account_data' && <>
+                        <select aria-label="علامة الجروب" value={groupFilter} onChange={event => { setGroupFilter(event.target.value); setCurrentPage(1); }} className="border rounded-lg px-2 py-2 text-xs bg-white dark:bg-slate-800">
+                            <option value="all">كل الحسابات</option>
+                            <option value="posted">محطوط على الجروب</option>
+                            <option value="unposted">مش محطوط على الجروب</option>
+                        </select>
+                        {canEdit && <>
+                            <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={paginatedRecords.length > 0 && paginatedRecords.every(row => selectedIds.has(row.id))} onChange={event => setSelectedIds(event.target.checked ? new Set(paginatedRecords.map(row => row.id)) : new Set())} />تحديد الصفحة</label>
+                            <button disabled={groupBusy || !selectedIds.size} onClick={() => markGroupAccounts([...selectedIds], true)} className="border rounded-lg px-3 py-2 text-xs disabled:opacity-40"><i className="fa-brands fa-whatsapp ml-1" />تعليم المحدد للجروب</button>
+                            <button disabled={groupBusy || !selectedIds.size} onClick={() => markGroupAccounts([...selectedIds], false)} className="border rounded-lg px-3 py-2 text-xs disabled:opacity-40">إزالة علامة المحدد</button>
+                        </>}
+                    </>}
+                </div>
                 {/* Filter and Search Bar */}
                 <div className="flex flex-col md:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
                     {/* Live Search */}
@@ -3261,6 +3339,15 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                             {/* Email */}
                                             <td className="px-1.5 py-1 font-medium">
+                                                {currentSheetId === 'account_data' && canEdit && <input type="checkbox" aria-label={'تحديد ' + (rec.email || rec.id)} checked={isSelected} onChange={() => toggleSelectRow(rec.id)} className="mx-1" />}
+                                                {currentSheetId === 'account_data' && <button
+                                                    type="button" disabled={!canEdit || groupBusy}
+                                                    onClick={() => markGroupAccounts([rec.id], !rec.postedToGroup)}
+                                                    title={rec.postedToGroup ? 'محطوط على الجروب - إزالة العلامة' : 'تعليم الحساب للجروب'}
+                                                    aria-label={rec.postedToGroup ? 'إزالة علامة الجروب' : 'تعليم الحساب للجروب'}
+                                                    aria-pressed={Boolean(rec.postedToGroup)}
+                                                    className={'inline-flex items-center gap-1 border rounded px-2 py-1 text-[10px] mb-1 ' + (rec.postedToGroup ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'text-slate-400 border-slate-200')}
+                                                ><i className="fa-brands fa-whatsapp" />{rec.postedToGroup ? 'محطوط على الجروب' : ''}</button>}
                                                 {rec.email ? (
                                                     <div className="flex items-center gap-1 dir-ltr justify-end">
                                                         {rec.notes && (
@@ -5329,6 +5416,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
                             </div>
                             <button
+                                disabled={bulkSaving}
                                 onClick={() => setShowBulkModal(false)}
                                 className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 hover:text-slate-700 dark:hover:text-white flex items-center justify-center transition"
                             >
@@ -5337,8 +5425,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </div>
 
                         <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
-                            <p className="font-bold text-slate-800 dark:text-slate-200">الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):</p>
-                            {isClientOrMerchant ? (
+                            <p className="font-bold text-slate-800 dark:text-slate-200">{adobeBulk ? 'بيانات الحسابات' : 'الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):'}</p>
+                            {adobeBulk ? <div className="font-mono text-xs" dir="ltr">HD05095400044EEG<br />****4774<br />adobe@example.com<br />student@university.edu.eg</div> : isClientOrMerchant ? (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass1:pass2:duration:notes
@@ -5358,12 +5446,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <form onSubmit={handleBulkAddSubmit} className="space-y-4">
                             <textarea
                                 rows={8}
+                                disabled={bulkSaving}
                                 value={bulkText}
                                 onChange={(e) => setBulkText(e.target.value)}
-                                placeholder="الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً..."
+                                placeholder={adobeBulk ? 'رقم الفاتورة\nالفيزا\nإيميل Adobe\nإيميل الجامعة' : 'الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً...'}
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dir-ltr text-left"
                             />
 
+                            {adobeBulk && <div className="max-h-60 overflow-auto text-xs">
+                                {bulkPreview.errors.map(error => <p key={error} role="alert" className="text-red-600">{error}</p>)}
+                                <table className="w-full text-right"><thead><tr><th>إيميل Adobe</th><th>الفاتورة</th><th>الفيزا</th><th>إيميل الجامعة</th></tr></thead><tbody>
+                                    {bulkPreview.records.map((row, index) => <tr key={index} className="border-t">{[row.email, row.invoiceNumber, row.visa, row.visaAccount].map((value, cell) => <td key={cell} dir="ltr" className="p-2 break-all">{value || '-'}</td>)}</tr>)}
+                                </tbody></table>
+                            </div>}
                             <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
                                 <span className="text-xs text-slate-400">
                                     عدد الأسطر: <b className="text-slate-700 dark:text-slate-200">{bulkText.split('\n').filter(l => l.trim()).length}</b>
@@ -5371,6 +5466,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 <div className="flex items-center gap-3">
                                     <button
                                         type="button"
+                                        disabled={bulkSaving}
                                         onClick={() => setShowBulkModal(false)}
                                         className="px-5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition"
                                     >
@@ -5378,6 +5474,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </button>
                                     <button
                                         type="submit"
+                                        disabled={bulkSaving || (adobeBulk && (!bulkPreview.records.length || bulkPreview.errors.length > 0))}
                                         className="px-6 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-lg shadow-purple-600/30 transition transform active:scale-95"
                                     >
                                         إضافة السجلات
