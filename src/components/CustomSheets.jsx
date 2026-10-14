@@ -4466,7 +4466,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 </div>
             )}
             {/* Modal: Add / Edit Single Record */}
-            {showAddModal && (
+            {showAddModal && createPortal((
                 <div className="fixed inset-0 z-[9999] flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in" style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', overflowY: 'auto' }}>
                     <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full max-h-[90vh] sm:max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
                         {/* Fixed Header with Title and Cancel/Close Button */}
@@ -5407,7 +5407,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         </form>
                     </div>
                 </div>
-            )}
+            ), document.body)}
 
             {/* Modal: Bulk Add */}
             {showBulkModal && createPortal((
