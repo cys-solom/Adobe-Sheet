@@ -326,7 +326,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const [sortBy, setSortBy] = useState({ field: 'created_at', asc: false });
     const [bulkText, setBulkText] = useState('');
     const [bulkSaving, setBulkSaving] = useState(false);
-    const bulkPreview = useMemo(() => parseAdobeAccounts(bulkText), [bulkText]);
+    const [bulkMode, setBulkMode] = useState('emails');
+    const bulkPreview = useMemo(() => parseAdobeAccounts(bulkText, bulkMode), [bulkText, bulkMode]);
     const [isDurationDropdownOpen, setIsDurationDropdownOpen] = useState(false);
     const durationDropdownRef = useRef(null);
     const addModalBodyRef = useRef(null);
@@ -5476,7 +5477,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <div className="flex-1 min-h-0 overflow-y-auto custom-modal-scroll space-y-4 pr-1">
                         <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
                             <p className="font-bold text-slate-800 dark:text-slate-200">{adobeBulk ? 'بيانات الحسابات' : 'الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):'}</p>
-                            {adobeBulk ? <div className="font-mono text-xs" dir="ltr">HD05095400044EEG<br />****4774<br />adobe@example.com<br />student@university.edu.eg</div> : isClientOrMerchant ? (
+                            {adobeBulk ? <fieldset disabled={bulkSaving} className="flex gap-4 flex-wrap py-2">
+                                <legend className="sr-only">نوع الإضافة</legend>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="bulkMode" value="emails" checked={bulkMode === 'emails'} onChange={() => setBulkMode('emails')} />
+                                    إيميلات فقط
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="bulkMode" value="full" checked={bulkMode === 'full'} onChange={() => setBulkMode('full')} />
+                                    بيانات كاملة
+                                </label>
+                            </fieldset> : isClientOrMerchant ? (
                                 <>
                                     <p className="font-mono text-[11px] text-indigo-600 dark:text-indigo-400">
                                         email:pass1:pass2:duration:notes
@@ -5499,7 +5510,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 disabled={bulkSaving}
                                 value={bulkText}
                                 onChange={(e) => setBulkText(e.target.value)}
-                                placeholder={adobeBulk ? 'user1@example.com Password1\nuser2@example.com Password2' : 'الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً...'}
+                                placeholder={adobeBulk ? (bulkMode === 'emails' ? 'user1@example.com\nuser2@example.com' : 'HD05095400044EEG\n****4774\nadobe@example.com\nstudent@university.edu.eg') : 'الصق البيانات هنا، كل سطر يمثل سجلاً منفصلاً...'}
                                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-4 text-xs font-mono text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-purple-500/50 dir-ltr text-left"
                             />
 

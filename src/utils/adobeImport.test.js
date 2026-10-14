@@ -25,3 +25,19 @@ test('supports mixed entries and preserves the invoice format and email-only def
 test('reports incomplete records', () => {
     assert.equal(parseAdobeAccounts('invoice\n****4774').errors.length, 1);
 });
+
+test('email-only mode supplies the default password and rejects full records or passwords', () => {
+    const result = parseAdobeAccounts('one@example.com\ntwo@example.com', 'emails');
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.records.length, 2);
+    assert.ok(result.records.every(row => row.password2 === DEFAULT_ADOBE_PASSWORD));
+    assert.ok(parseAdobeAccounts('one@example.com Password', 'emails').errors.length);
+    assert.ok(parseAdobeAccounts('INV-1\n****1234\none@example.com\nstudent@university.edu', 'emails').errors.length);
+});
+
+test('full mode requires complete four-line records', () => {
+    assert.ok(parseAdobeAccounts('one@example.com', 'full').errors.length);
+    const result = parseAdobeAccounts('INV-1\n****1234\none@example.com\nstudent@university.edu', 'full');
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.records[0].password2, DEFAULT_ADOBE_PASSWORD);
+});
