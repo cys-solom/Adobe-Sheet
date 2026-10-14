@@ -1,5 +1,6 @@
 import { DEFAULT_ADOBE_PASSWORD, isAccountEmail, parseAdobeAccounts } from '../utils/adobeImport';
 import EmailLookup from './EmailLookup';
+import { accountEmailKey, duplicateAccountEmails, hasAccountEmail } from '../utils/duplicateAccounts';
 import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
 import { saleKeysForAccount } from '../services/accountLookup';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -973,6 +974,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         setIsSaving(true);
         try {
+        if (editingRecord && currentSheetId === 'account_data'
+            && accountEmailKey(formData.email) !== accountEmailKey(editingRecord.email)) {
+            const sheets = await readCloudSheets();
+            if (hasAccountEmail(sheets.account_data || [], formData.email, editingRecord.id)) {
+                showToast('الإيميل ده موجود قبل كده في الحسابات: ' + formData.email.trim(), 'warning');
+                return;
+            }
+        }
         if (editingRecord) {
             // Edit existing
             const updated = records.map(item => {
@@ -1001,7 +1010,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             } else if (currentSheetId === 'account_data') {
                 const sheets = await readCloudSheets();
                 const key = formData.email.trim().toLowerCase();
-                const duplicate = Object.values(sheets).flat().some(row => row && String(row.email || '').trim().toLowerCase() === key);
+                const duplicate = hasAccountEmail(sheets.account_data || [], key);
                 if (duplicate) { showToast('الإيميل مسجل بالفعل. استخدم تعديل الحساب للحفاظ على بياناته', 'warning'); return; }
                 if (!await saveRecords([{ ...newRecord, email: formData.email.trim() }, ...(sheets.account_data || [])])) return;
             } else if (!await saveRecords([newRecord, ...records])) return;
@@ -1612,16 +1621,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             try {
                 const sheets = await readCloudSheets();
                 const existing = sheets.account_data || [];
-                const known = new Set(Object.values(sheets).flat().filter(Boolean).map(row => String(row.email || '').trim().toLowerCase()));
+                const known = new Set(existing.map(row => accountEmailKey(row?.email)).filter(Boolean));
                 const added = [];
                 for (const item of bulkPreview.records) {
-                    const key = item.email.toLowerCase();
+                    const key = accountEmailKey(item.email);
                     if (known.has(key)) continue;
                     known.add(key);
                     added.push({ ...item, id: crypto.randomUUID(), accountCategory: 'adobe',
                         currentUses: 0, maxUses: 2, created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
                 }
-                if (added.length && !await saveRecords([...added, ...existing])) return;
+                if (!added.length) {
+                    showToast('الإيميلات دي موجودة قبل كده في الحسابات، لم تتم إضافة أي حساب', 'warning');
+                    return;
+                }
+                if (!await saveRecords([...added, ...existing])) return;
                 showToast('تمت إضافة ' + added.length + ' حساب، وتخطي ' + (bulkPreview.records.length - added.length) + ' مكرر', 'success');
                 setBulkText('');
                 setShowBulkModal(false);
@@ -1680,7 +1693,20 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         });
 
         if (newItems.length > 0) {
-            saveRecords([...newItems, ...records]);
+            if (currentSheetId === 'account_data') {
+                const sheets = await readCloudSheets();
+                const existing = sheets.account_data || [];
+                const seen = new Set(existing.map(row => accountEmailKey(row?.email)).filter(Boolean));
+                for (const item of newItems) {
+                    const key = accountEmailKey(item.email);
+                    if (!isAccountEmail(key) || seen.has(key)) {
+                        showToast('إيميل غير صالح أو موجود قبل كده: ' + item.email, 'warning');
+                        return;
+                    }
+                    seen.add(key);
+                }
+                if (!await saveRecords([...newItems, ...existing])) return;
+            } else if (!await saveRecords([...newItems, ...records])) return;
             showToast(`تمت إضافة ${newItems.length} سجل بنجاح ✓`, 'success');
             setBulkText('');
             setShowBulkModal(false);
@@ -1930,15 +1956,19 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         return { nearRenewal, expired, active };
     }, [records, currentSheetId, activeAccountCategory]);
 
+    const duplicateEmails = useMemo(() => duplicateAccountEmails(records), [records]);
+
     // Filter & Search (bulletproof against numbers and nulls)
     const filteredRecords = useMemo(() => {
         let result = records;
-        if (currentSheetId === 'account_data' && groupFilter !== 'all') {
+        if (currentSheetId === 'account_data' && groupFilter === 'duplicates') {
+            result = result.filter(record => duplicateEmails.has(accountEmailKey(record.email)));
+        } else if (currentSheetId === 'account_data' && groupFilter !== 'all') {
             result = result.filter(record => groupFilter === 'posted' ? record.postedToGroup : !record.postedToGroup);
         }
 
         if (currentSheetId === 'account_data') {
-            result = result.filter(r => getAccountCategory(r) === activeAccountCategory);
+            if (groupFilter !== 'duplicates') result = result.filter(r => getAccountCategory(r) === activeAccountCategory);
             if (accountStockFilter !== 'all') {
                 result = result.filter(r => {
                     const currentUses = Math.max(0, Number(r.currentUses || 0));
@@ -2502,10 +2532,21 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     <EmailLookup sheetsList={sheetsList} />
                     {currentSheetId === 'account_data' && activeAccountCategory === 'adobe' && canAdd && <button type="button" onClick={() => { setBulkText(''); setShowBulkModal(true); }} className="border rounded-lg px-3 py-2 text-xs font-bold"><i className="fa-solid fa-list ml-1" />إضافة إيميلات بالجملة</button>}
                     {currentSheetId === 'account_data' && <>
+                        <button type='button' aria-pressed={groupFilter === 'duplicates'} onClick={() => {
+                            setGroupFilter(groupFilter === 'duplicates' ? 'all' : 'duplicates');
+                            setCurrentPage(1);
+                            setSearchTerm('');
+                            setAccountStockFilter('all');
+                            setOfferReminderFilter('all');
+                        }} className='border rounded-lg px-3 py-2 text-xs font-bold'>
+                            <i className='fa-solid fa-copy ml-1' />
+                            الإيميلات المتكررة ({duplicateEmails.size})
+                        </button>
                         <select aria-label="علامة الجروب" value={groupFilter} onChange={event => { setGroupFilter(event.target.value); setCurrentPage(1); }} className="border rounded-lg px-2 py-2 text-xs bg-white dark:bg-slate-800">
                             <option value="all">كل الحسابات</option>
                             <option value="posted">محطوط على الجروب</option>
                             <option value="unposted">مش محطوط على الجروب</option>
+                            <option value='duplicates'>الإيميلات المتكررة</option>
                         </select>
                         {canEdit && <>
                             <label className="flex items-center gap-1 text-xs"><input type="checkbox" checked={paginatedRecords.length > 0 && paginatedRecords.every(row => selectedIds.has(row.id))} onChange={event => setSelectedIds(event.target.checked ? new Set(paginatedRecords.map(row => row.id)) : new Set())} />تحديد الصفحة</label>
