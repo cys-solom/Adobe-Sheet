@@ -4467,7 +4467,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             )}
             {/* Modal: Add / Edit Single Record */}
             {showAddModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+                <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-sm animate-fade-in" style={{ position: 'fixed', top: 0, right: 0, bottom: 0, left: 0, width: '100vw', height: '100vh', overflow: 'auto' }}>`r`n                <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 'min(100% - 24px, 960px)', maxHeight: 'calc(100vh - 24px)' }}>
                     <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full max-h-[90vh] sm:max-h-[88vh] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden">
                         {/* Fixed Header with Title and Cancel/Close Button */}
                         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex-shrink-0">
@@ -5406,6 +5406,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </div>
                         </form>
                     </div>
+                </div>
                 </div>
             )}
 
