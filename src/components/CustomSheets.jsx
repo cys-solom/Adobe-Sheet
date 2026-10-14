@@ -327,6 +327,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const bulkPreview = useMemo(() => parseAdobeAccounts(bulkText), [bulkText]);
     const [isDurationDropdownOpen, setIsDurationDropdownOpen] = useState(false);
     const durationDropdownRef = useRef(null);
+    const addModalBodyRef = useRef(null);
     const [expiryFilter, setExpiryFilter] = useState('all'); // 'all', 'near', 'expired', 'active'
     const [offerReminderFilter, setOfferReminderFilter] = useState('all'); // account_data only: all, pending, near3, today, overdue
     const [isAlertsExpanded, setIsAlertsExpanded] = useState(true);
@@ -362,6 +363,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             Array.from(row.cells).forEach((cell, index) => { cell.dataset.label = labels[index] || ''; });
         });
     }, [records, currentPage, currentSheetId, searchTerm, expiryFilter, offerReminderFilter, sortBy, pageSize]);
+
+    useEffect(() => {
+        if (showAddModal && addModalBodyRef.current) {
+            addModalBodyRef.current.scrollTop = 0;
+        }
+    }, [showAddModal, editingRecord]);
 
     // Form State
     const [formData, setFormData] = useState({
@@ -4489,7 +4496,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <form onSubmit={handleFormSubmit} aria-busy={isSaving} className="flex flex-col flex-1 min-h-0">
                             {/* Scrollable Form Body with visible scrollbar on the left side */}
-                            <div className="flex-1 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
+                            <div ref={addModalBodyRef} className="flex-1 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
                             {currentSheetId === 'client_data' && (
                                 <div className="sticky top-0 z-30 -mx-2 rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50/95 dark:bg-purple-950/95 backdrop-blur-md p-3 space-y-3 shadow-lg shadow-purple-900/10">
                                     <div className="grid grid-cols-2 gap-2">
