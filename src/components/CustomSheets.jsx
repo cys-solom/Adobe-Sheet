@@ -5411,7 +5411,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             {/* Modal: Bulk Add */}
             {showBulkModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-800 space-y-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-2xl w-full max-h-[calc(100vh-2rem)] shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col overflow-hidden p-6">
                         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
                             <div className="flex items-center gap-3">
                                 <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center text-lg">
@@ -5431,7 +5431,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             </button>
                         </div>
 
-                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
+                        <div className="flex-1 min-h-0 overflow-y-auto custom-modal-scroll space-y-4 pr-1">`r`n                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl text-xs text-slate-600 dark:text-slate-400 space-y-1">
                             <p className="font-bold text-slate-800 dark:text-slate-200">{adobeBulk ? 'بيانات الحسابات' : 'الصيغ المدعومة لكل سطر (مفصولة بـ : أو | أو Tab):'}</p>
                             {adobeBulk ? <div className="font-mono text-xs" dir="ltr">HD05095400044EEG<br />****4774<br />adobe@example.com<br />student@university.edu.eg</div> : isClientOrMerchant ? (
                                 <>
