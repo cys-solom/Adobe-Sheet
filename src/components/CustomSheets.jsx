@@ -1487,9 +1487,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                 await syncAccountUsageFromCloudSheets({ [targetSheetId]: updatedTarget, trash_data: updatedTrash });
             } else {
                 const updated = records.map(item => String(item.id) === String(record.id) ? renewedRecord : item);
-                await saveRecords(updated);
+                if (!await saveRecords(updated)) return;
             }
             resetRenewModal();
+            setRenewalFilter('all');
+            setCurrentPage(1);
             showToast('Customer renewed successfully', 'success');
         } catch (error) {
             console.error('Failed renewing customer cycle:', error);
@@ -1549,9 +1551,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             setRecords(updatedRecords);
             await refreshAllCounts();
             setNoRenewModal({ open: false, record: null, newPassword: '', isSubmitting: false });
-            setRenewalFilter('not_renewed');
-            setShowAdvancedFilters(true);
-            showToast('Customer marked as not renewed and account returned to stock', 'success');
+            setRenewalFilter('all');
+            setCurrentPage(1);
+            showToast('تم نقل العميل إلى عملاء قدامى وحفظ تحديث الحساب', 'success');
         } catch (error) {
             console.error('Failed archiving not-renewed customer:', error);
             setNoRenewModal(prev => ({ ...prev, isSubmitting: false }));
@@ -2081,7 +2083,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             });
         }
 
-        if (renewalFilter !== 'all' && (isClientOrMerchant || isTrashSheet || currentSheetId === 'account_data')) {
+        if (isClientOrMerchant || (renewalFilter !== 'all' && (isTrashSheet || currentSheetId === 'account_data'))) {
             result = result.filter(r => {
                 const notRenewed = r.renewalStatus === 'not_renewed' || Boolean(r.nonRenewedAt);
                 return renewalFilter === 'not_renewed' ? notRenewed : !notRenewed;
@@ -2738,16 +2740,22 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                             <i className="fa-solid fa-user-clock"></i>
                         </div>
                         <div className="min-w-0">
-                            <p className="text-sm font-black text-slate-800 dark:text-white">{'\u0627\u0644\u0646\u0627\u0633 \u0627\u0644\u0644\u064a \u0645\u062c\u062f\u062f\u062a\u0634'}</p>
-                            <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Customers stay here, not in trash</p>
+                            <p className="text-sm font-black text-slate-800 dark:text-white">بيانات العملاء</p>
                         </div>
                     </div>
+                    <button type="button" aria-pressed={renewalFilter !== 'not_renewed'}
+                        onClick={() => { setRenewalFilter('all'); setExpiryFilter('all'); setPaymentFilter('all'); setDeviceFilter('all'); setSearchTerm(''); setCurrentPage(1); }}
+                        className="border rounded-lg px-4 py-2 text-xs font-bold">
+                        العملاء النشطون ({stats.total - stats.notRenewedCount})
+                    </button>
                     <button
                         type="button"
-                        onClick={() => { setRenewalFilter('not_renewed'); setShowAdvancedFilters(true); setCurrentPage(1); }}
+                        aria-pressed={renewalFilter === 'not_renewed'}
+                        onClick={() => { setRenewalFilter('not_renewed'); setExpiryFilter('all'); setPaymentFilter('all'); setDeviceFilter('all'); setSearchTerm(''); setCurrentPage(1); }}
                         className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl border text-xs font-black transition ${renewalFilter === 'not_renewed' ? 'bg-rose-600 text-white border-rose-600' : 'bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-950/50'}`}
                     >
                         <i className="fa-solid fa-filter"></i>
+                        <span>عملاء قدامى</span>
                         <span>{stats.notRenewedCount || 0}</span>
                     </button>
                 </div>
@@ -2862,9 +2870,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     </p>
                                     <div className="flex flex-wrap gap-2">
                                         {[
-                                            { id: 'all', label: 'All' },
-                                            { id: 'renewed', label: 'Active / renewed' },
-                                            { id: 'not_renewed', label: 'Not renewed' },
+                                            { id: 'all', label: isClientOrMerchant ? 'العملاء النشطون' : 'الكل' },
+                                            ...(!isClientOrMerchant ? [{ id: 'renewed', label: 'نشط / جدد' }] : []),
+                                            { id: 'not_renewed', label: 'عملاء قدامى' },
                                         ].map(opt => (
                                             <button
                                                 key={opt.id}
