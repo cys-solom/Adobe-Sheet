@@ -4392,7 +4392,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                 </div>
 
                                 {renewModal.accountMode === 'stock' && (
-                                    <div className="sticky top-0 z-20 grid grid-cols-1 gap-2 max-h-56 overflow-y-auto custom-modal-scroll pr-1 bg-white/95 dark:bg-slate-900/95 py-1">
+                                    <div className="grid grid-cols-1 gap-2 max-h-56 overflow-y-auto overscroll-contain custom-modal-scroll pr-1 bg-white dark:bg-slate-900 py-1">
                                         {renewStockAccounts.length > 0 ? renewStockAccounts.map(account => {
                                             const maxUses = Math.max(1, Number(account.maxUses || 2));
                                             const currentUses = Math.max(0, Number(account.currentUses || 0));
@@ -4552,9 +4552,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                         <form onSubmit={handleFormSubmit} aria-busy={isSaving} className="flex flex-col flex-1 min-h-0">
                             {/* Scrollable Form Body with visible scrollbar on the left side */}
-                            <div ref={addModalBodyRef} className="flex-1 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
+                            <div ref={addModalBodyRef} className="flex-1 min-h-0 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
                             {isClientOrMerchant && (
-                                <div className="sticky top-0 z-30 -mx-2 rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50/95 dark:bg-purple-950/95 backdrop-blur-md p-3 space-y-3 shadow-lg shadow-purple-900/10">
+                                <div className="rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50 dark:bg-purple-950 p-3 space-y-3">
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
                                             type="button"
@@ -4618,7 +4618,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                 </select>
                                             </div>
                                             {displayedAvailableAccountChoices.length > 0 ? (
-                                                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1 custom-modal-scroll">
+                                                <div className="grid grid-cols-1 gap-2 max-h-[min(16rem,35dvh)] overflow-y-auto overscroll-contain pr-1 custom-modal-scroll">
                                                     {displayedAvailableAccountChoices.map(acc => {
                                                         const maxUses = Math.max(1, Number(acc.maxUses || 2));
                                                         const currentUses = Math.max(0, Number(acc.currentUses || 0));
