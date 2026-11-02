@@ -1,5 +1,6 @@
 import { DEFAULT_ADOBE_PASSWORD, isAccountEmail, parseAdobeAccounts } from '../utils/adobeImport';
 import EmailLookup from './EmailLookup';
+import MerchantPicker from './MerchantPicker';
 import { accountEmailKey, duplicateAccountEmails, hasAccountEmail } from '../utils/duplicateAccounts';
 import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
 import { saleKeysForAccount } from '../services/accountLookup';
@@ -848,7 +849,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         if (isSaving) return;
 
         if (isClientOrMerchant) {
-            if (!editingRecord && currentSheetId === 'client_data' && accountEntryMode === 'available' && !findSelectedAvailableAccount()) {
+            if (currentSheetId === 'merchant_data' && !formData.name.trim()) {
+                showToast('يرجى اختيار اسم التاجر', 'warning');
+                return;
+            }
+            if (!editingRecord && accountEntryMode === 'available' && !findSelectedAvailableAccount()) {
                 showToast('يرجى اختيار ميل متاح من بيانات الحساب', 'warning');
                 return;
             }
@@ -4548,7 +4553,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                         <form onSubmit={handleFormSubmit} aria-busy={isSaving} className="flex flex-col flex-1 min-h-0">
                             {/* Scrollable Form Body with visible scrollbar on the left side */}
                             <div ref={addModalBodyRef} className="flex-1 overflow-y-auto custom-modal-scroll px-6 py-5 space-y-4">
-                            {currentSheetId === 'client_data' && (
+                            {isClientOrMerchant && (
                                 <div className="sticky top-0 z-30 -mx-2 rounded-2xl border-2 border-purple-100 dark:border-purple-900/60 bg-purple-50/95 dark:bg-purple-950/95 backdrop-blur-md p-3 space-y-3 shadow-lg shadow-purple-900/10">
                                     <div className="grid grid-cols-2 gap-2">
                                         <button
@@ -4726,24 +4731,30 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                     )}
                                 </div>
                             )}
-                            {currentSheetId === 'client_data' && (
+                            {currentSheetId === 'merchant_data' && (
+                                <MerchantPicker value={formData.name}
+                                    onChange={name => setFormData(prev => ({ ...prev, name }))}
+                                    sheets={sheetsList} onSaved={setSheetsList} records={records} />
+                            )}
+                            {isClientOrMerchant && (
                                 <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-900/40 p-3.5 space-y-3">
                                     <div className="flex items-center gap-2 text-slate-800 dark:text-slate-200 font-black text-xs">
                                         <i className="fa-solid fa-address-card text-indigo-500"></i>
-                                        <span>بيانات العميل والتواصل</span>
+                                        <span>{currentSheetId === 'merchant_data' ? 'بيانات التاجر والتواصل' : 'بيانات العميل والتواصل'}</span>
                                         <span className="text-[10px] font-bold text-slate-400">اختياري</span>
                                     </div>
 
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                                                اسم العميل
+                                                {currentSheetId === 'merchant_data' ? 'التاجر المختار' : 'اسم العميل'}
                                             </label>
                                             <div className="relative">
                                                 <i className="fa-solid fa-user absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                                                 <input
                                                     type="text"
                                                     value={formData.name}
+                                                    readOnly={currentSheetId === 'merchant_data'}
                                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
                                                     placeholder="اسم العميل إن وجد"
                                                     className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl pr-9 pl-4 py-2.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
