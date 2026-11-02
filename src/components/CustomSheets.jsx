@@ -1,6 +1,7 @@
 import { DEFAULT_ADOBE_PASSWORD, isAccountEmail, parseAdobeAccounts } from '../utils/adobeImport';
 import EmailLookup from './EmailLookup';
 import MerchantPicker from './MerchantPicker';
+import { accountOfferState, accountOfferReminder, toggleAccountOffer } from '../utils/accountOffers';
 import { accountEmailKey, duplicateAccountEmails, hasAccountEmail } from '../utils/duplicateAccounts';
 import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
 import { saleKeysForAccount } from '../services/accountLookup';
@@ -153,10 +154,10 @@ const calculateChatGPTMonthlyReminder = (record) => {
     return { text: `ChatGPT renewal in ${diffDays} days`, status: 'active', days: diffDays, targetDate, createdDate, reminderDays: 30 };
 };
 
-const getAccountReminder = (record) => {
+const calculateCategorizedReminder = (record) => {
     if (getAccountCategory(record) === 'capcut') return calculateCapCutMonthlyReminder(record);
     if (getAccountCategory(record) === 'chatgpt_shared') return calculateChatGPTMonthlyReminder(record);
-    return calculateAccountReminder(record?.accountCreatedDate, record?.reminderDays, record?.created_at);
+    return accountOfferReminder(record);
 };
 
 /**
@@ -302,6 +303,11 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     // Current active sheet
     const currentSheetId = activeSheetId || 'client_data';
+    const isOfferDone = record => currentSheetId === 'account_data' && getAccountCategory(record) === 'adobe'
+        ? accountOfferState(record).done : Boolean(record.offerActivated);
+    const getAccountReminder = record => currentSheetId === 'reminders_data'
+        ? calculateAccountReminder(record.accountCreatedDate, record.reminderDays, record.created_at)
+        : calculateCategorizedReminder(record);
     const isTrashSheet = currentSheetId === 'trash_data';
 
     // Sheet titles & metadata (customizable)
@@ -309,6 +315,10 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
     // Sheet Data state for current sheet
     const [records, setRecords] = useState([]);
+    useEffect(() => {
+        const timer = setInterval(() => setRecords(previous => [...previous]), 60000);
+        return () => clearInterval(timer);
+    }, []);
     const [allSheetsCounts, setAllSheetsCounts] = useState({});
 
     // UI States
@@ -1084,7 +1094,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             notes: rec.notes || '',
             accountCreatedDate: rec.accountCreatedDate || '',
             reminderDays: rec.reminderDays || '',
-            offerActivated: rec.offerActivated || false,
+            offerActivated: isOfferDone(rec) || false,
             offerActivatedAt: rec.offerActivatedAt || '',
             accountCategory: getAccountCategory(rec),
             capcutMode: rec.capcutMode || '',
@@ -1569,7 +1579,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const handleToggleOfferActivated = async (id) => {
         const updated = records.map(r => {
             if (r.id !== id) return r;
-            const nextValue = !r.offerActivated;
+            if (currentSheetId === 'account_data' && getAccountCategory(r) === 'adobe') return toggleAccountOffer(r);
+            const nextValue = !isOfferDone(r);
             return {
                 ...r,
                 offerActivated: nextValue,
@@ -1777,7 +1788,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                     base['تاريخ إنشاء الحساب (Creation Date)'] = r.accountCreatedDate || '';
                     base['فترة التذكير بالأيام (Reminder Days)'] = r.reminderDays || '';
                     base['حالة التذكير'] = rem.text || '';
-                    base['تم تفعيل العرض'] = r.offerActivated ? 'تم' : 'لم يتم';
+                    base['تم تفعيل العرض'] = isOfferDone(r) ? 'تم' : 'لم يتم';
                     base['تاريخ تفعيل العرض'] = r.offerActivatedAt ? new Date(r.offerActivatedAt).toLocaleString('ar-EG') : '';
                 } else {
                     base['بيانات الحساب (Account)'] = r.selectedAccount || '';
@@ -1936,7 +1947,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             : records;
 
         sourceRecords.forEach(r => {
-            if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return;
+            if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && isOfferDone(r)) return;
             if (isClientOrMerchant && isSubscriptionNotRenewed(r)) return;
 
             const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
@@ -1993,9 +2004,9 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
         // Filter by Expiry Status Tab (All, Near Renewal, Expired, Active)
         if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && offerReminderFilter !== 'all') {
             result = result.filter(r => {
-                if (offerReminderFilter === 'completed') return !!r.offerActivated;
-                if (offerReminderFilter === 'pending') return !r.offerActivated;
-                if (r.offerActivated) return false;
+                if (offerReminderFilter === 'completed') return !!isOfferDone(r);
+                if (offerReminderFilter === 'pending') return !isOfferDone(r);
+                if (isOfferDone(r)) return false;
                 const rem = getAccountReminder(r);
                 if (offerReminderFilter === 'near3') return rem.days !== null && rem.days > 0 && rem.days <= 3;
                 if (offerReminderFilter === 'today') return rem.days === 0;
@@ -2006,7 +2017,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
         if (expiryFilter === 'near') {
             result = result.filter(r => {
-                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
+                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && isOfferDone(r)) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
                     : getSubscriptionRemaining(r);
@@ -2014,7 +2025,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             });
         } else if (expiryFilter === 'expired') {
             result = result.filter(r => {
-                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && r.offerActivated) return false;
+                if ((currentSheetId === 'account_data' || currentSheetId === 'reminders_data') && isOfferDone(r)) return false;
                 const rem = (currentSheetId === 'account_data' || currentSheetId === 'reminders_data')
                     ? getAccountReminder(r)
                     : getSubscriptionRemaining(r);
@@ -2164,7 +2175,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
             : records;
 
         return sourceRecords.reduce((acc, r) => {
-            if (r.offerActivated) {
+            if (isOfferDone(r)) {
                 acc.completed += 1;
                 return acc;
             }
@@ -3146,7 +3157,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                         return (
                                             <tr
                                                 key={rec.id}
-                                                className={`transition-colors ${rec.offerActivated ? 'bg-slate-50/50 dark:bg-slate-900/40 opacity-75' : 'hover:bg-amber-50/30 dark:hover:bg-slate-800/50'}`}
+                                                className={`transition-colors ${isOfferDone(rec) ? 'bg-slate-50/50 dark:bg-slate-900/40 opacity-75' : 'hover:bg-amber-50/30 dark:hover:bg-slate-800/50'}`}
                                             >
                                                 {/* Row # */}
                                                 <td className="px-1 py-2 text-center font-mono text-slate-400 text-[10px]">
@@ -3160,17 +3171,17 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                             type="button"
                                                             onClick={() => handleToggleOfferActivated(rec.id)}
                                                             className={`w-5 h-5 rounded-md border flex items-center justify-center transition cursor-pointer flex-shrink-0 ${
-                                                                rec.offerActivated
+                                                                isOfferDone(rec)
                                                                     ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
                                                                     : 'border-slate-300 dark:border-slate-600 hover:border-emerald-500 text-transparent hover:text-emerald-500 bg-white dark:bg-slate-800'
                                                             }`}
-                                                            title={rec.offerActivated ? 'انقر لإلغاء الإنجاز وإعادته لقيد الانتظار' : 'انقر للتعليم كمكتمل'}
+                                                            title={isOfferDone(rec) ? 'انقر لإلغاء الإنجاز وإعادته لقيد الانتظار' : 'انقر للتعليم كمكتمل'}
                                                         >
                                                             <i className="fa-solid fa-check text-[10px]"></i>
                                                         </button>
                                                         <div className="min-w-0 flex items-center gap-1.5 flex-1">
                                                             <span className={`text-xs font-bold truncate ${
-                                                                rec.offerActivated ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'
+                                                                isOfferDone(rec) ? 'line-through text-slate-400 dark:text-slate-500' : 'text-slate-800 dark:text-slate-100'
                                                             }`} title={rec.email}>
                                                                 {rec.email || 'بدون عنوان'}
                                                             </span>
@@ -3223,7 +3234,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                                 {/* Status & Countdown Badge */}
                                                 <td className="px-2 py-2 whitespace-nowrap">
-                                                    {rec.offerActivated ? (
+                                                    {isOfferDone(rec) ? (
                                                         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-black bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
                                                             <i className="fa-solid fa-circle-check"></i>
                                                             <span>تم الإنجاز ✓</span>
@@ -3731,7 +3742,7 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                         {(() => {
                                                             const effectiveDate = rec.accountCreatedDate || (rec.created_at ? String(rec.created_at).slice(0, 10) : '');
                                                             const category = getAccountCategory(rec);
-                                                            if (category === 'adobe' && rec.offerActivated) {
+                                                            if (category === 'adobe' && isOfferDone(rec)) {
                                                                 return (
                                                                     <button
                                                                         type="button"
@@ -3784,14 +3795,14 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
                                                                         type="button"
                                                                         onClick={() => handleToggleOfferActivated(rec.id)}
                                                                         className={`${category !== 'adobe' ? 'hidden' : 'inline-flex'} items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-black border transition whitespace-nowrap ${
-                                                                            rec.offerActivated
+                                                                            isOfferDone(rec)
                                                                                 ? 'bg-emerald-600 text-white border-emerald-600 hover:bg-emerald-700'
                                                                                 : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-emerald-400 hover:text-emerald-700'
                                                                         }`}
-                                                                        title={rec.offerActivated ? `تم تفعيل العرض${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'تعليم أن عرض التفعيل اتعمل على الحساب'}
+                                                                        title={isOfferDone(rec) ? `تم تفعيل العرض${rec.offerActivatedAt ? ` - ${new Date(rec.offerActivatedAt).toLocaleDateString('ar-EG')}` : ''}` : 'تعليم أن عرض التفعيل اتعمل على الحساب'}
                                                                     >
-                                                                        <i className={`fa-solid ${rec.offerActivated ? 'fa-check' : 'fa-bolt'} text-[8px]`}></i>
-                                                                        <span>{rec.offerActivated ? 'العرض اتفعل' : 'تم تفعيل العرض'}</span>
+                                                                        <i className={`fa-solid ${isOfferDone(rec) ? 'fa-check' : 'fa-bolt'} text-[8px]`}></i>
+                                                                        <span>{isOfferDone(rec) ? 'العرض اتفعل' : 'تم تفعيل العرض'}</span>
                                                                     </button>
                                                                 </div>
                                                             );

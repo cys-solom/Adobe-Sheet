@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { DEFAULT_SHEETS, calculateRemainingTime, calculateAccountReminder } from '../utils/dataRepair';
+import { accountOfferState, accountOfferReminder } from '../utils/accountOffers';
 import { useAuth } from '../context/AuthContext';
 import { SHEETS_CHANGED, markSubscriptionNotRenewed } from '../services/sheetSync';
 import { sheetsAPI } from '../services/api';
@@ -152,14 +153,16 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
         const alertsList = [];
 
         Object.entries(allRecordsBySheet).forEach(([sheetId, records]) => {
-            if (sheetId === 'trash_data' || sheetId === 'account_data') return;
+            if (sheetId === 'trash_data') return;
             if (!canAccessSheet(sheetId)) return; // Only process sheets the user is permitted to access
             totalCount += records.length;
             const sheetMeta = getSheetMeta(sheetId);
 
             records.forEach(rec => {
+                const accountOffer = sheetId === 'account_data';
+                if (accountOffer && ((rec.accountCategory && rec.accountCategory !== 'adobe') || accountOfferState(rec).done)) return;
                 if (rec.duration) totalSubscriptions++;
-                const rem = calculateRemainingTime(rec.startDate, rec.duration, rec.created_at);
+                const rem = accountOffer ? accountOfferReminder(rec) : calculateRemainingTime(rec.startDate, rec.duration, rec.created_at);
 
                 if (!rem || rem.status === 'none') return;
 
@@ -170,6 +173,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
                 if (isNear || isExpired) {
                     alertsList.push({
                         ...rec,
+                        ...(accountOffer ? { reminderDays: String(accountOfferState(rec).days) } : {}),
                         sheetId,
                         sheetName: sheetMeta.name || sheetMeta.label || sheetId,
                         sheetColor: sheetMeta.color || 'from-indigo-600 to-blue-600',
@@ -493,7 +497,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
                             className="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                         >
                             <option value="all">جميع الشيتات المتاحة</option>
-                            {DEFAULT_SHEETS.filter(ds => ds.id !== 'trash_data' && ds.id !== 'account_data' && canAccessSheet(ds.id)).map(ds => {
+                            {DEFAULT_SHEETS.filter(ds => ds.id !== 'trash_data' && canAccessSheet(ds.id)).map(ds => {
                                 const meta = getSheetMeta(ds.id);
                                 return (
                                     <option key={ds.id} value={ds.id}>
@@ -730,7 +734,7 @@ export default function DashboardAlerts({ onNavigateSheet, mode = 'dashboard' })
                                         </span>
 
                                         <div className="flex items-center gap-2">
-                                            {['near', 'expired'].includes(item.alertType) && (
+                                            {['client_data', 'merchant_data'].includes(item.sheetId) && ['near', 'expired'].includes(item.alertType) && (
                                                 <button
                                                     onClick={() => handleMarkNotRenewed(item)}
                                                     disabled={isProcessing}

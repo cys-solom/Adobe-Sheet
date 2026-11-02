@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { calculateRemainingTime, calculateAccountReminder } from '../utils/dataRepair';
 import { sheetsAPI, usersAPI } from '../services/api';
 import { SHEETS_CHANGED } from '../services/sheetSync';
+import { accountOfferState, accountOfferReminder } from '../utils/accountOffers';
 
 const DEFAULT_SHEETS = [
     { id: 'client_data', label: 'بيانات العميل', icon: 'fa-user-tie', color: 'text-blue-400', activeBg: 'bg-blue-600' },
@@ -118,8 +119,9 @@ export default function Sidebar ({ isOpen, onClose }) {
 
                 if (s.id === 'account_data' || s.id === 'reminders_data') {
                     parsed.forEach(r => {
-                        if (r.offerActivated) return;
-                        const rem = calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
+                        const adobeAccount = s.id === 'account_data' && (!r.accountCategory || r.accountCategory === 'adobe');
+                        if (adobeAccount ? accountOfferState(r).done : r.offerActivated) return;
+                        const rem = adobeAccount ? accountOfferReminder(r) : calculateAccountReminder(r.accountCreatedDate, r.reminderDays, r.created_at);
                         if (rem && rem.days !== null && rem.days <= 3) alertsTotal++;
                     });
                     return;
