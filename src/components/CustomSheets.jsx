@@ -3426,6 +3426,12 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                                             {/* Email */}
                                             <td className="px-1.5 py-1 font-medium">
+                                                {currentSheetId === 'merchant_data' && (
+                                                    <div className="flex items-start gap-1.5 mb-1 text-xs font-bold text-slate-700 dark:text-slate-200" dir="rtl">
+                                                        <i className="fa-solid fa-store mt-1 text-emerald-600" aria-hidden="true" />
+                                                        <span className="max-w-[220px] break-words" title={rec.name || ''}>{rec.name || 'تاجر بدون اسم'}</span>
+                                                    </div>
+                                                )}
                                                 {currentSheetId === 'account_data' && canEdit && <input type="checkbox" aria-label={'تحديد ' + (rec.email || rec.id)} checked={isSelected} onChange={() => toggleSelectRow(rec.id)} className="mx-1" />}
                                                 {currentSheetId === 'account_data' && <button
                                                     type="button" disabled={!canEdit || groupBusy}
