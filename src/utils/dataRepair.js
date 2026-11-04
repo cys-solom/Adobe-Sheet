@@ -128,6 +128,17 @@ export const sanitizeRecord = (r, idx = 0) => {
         groupPostedAt: String(r.groupPostedAt || ''),
         groupSaleKeys: Array.isArray(r.groupSaleKeys) ? r.groupSaleKeys.filter(key => typeof key === 'string') : [],
         renewalStatus: String(rawRenewalStatus || '').trim(),
+        renewalHistory: Array.isArray(r.renewalHistory) ? r.renewalHistory.filter(entry => entry && typeof entry === 'object') : [],
+        ...(r.merchantTransfer && typeof r.merchantTransfer === 'object' ? {
+            merchantTransfer: {
+                from: String(r.merchantTransfer.from || ''),
+                previousName: String(r.merchantTransfer.previousName || ''),
+                merchantName: String(r.merchantTransfer.merchantName || ''),
+                transferredAt: String(r.merchantTransfer.transferredAt || '')
+            }
+        } : {}),
+        accountUsageMode: String(r.accountUsageMode || ''),
+        saleType: String(r.saleType || ''),
         nonRenewedAt: String(rawNonRenewedAt || '').trim(),
         releasedAccountAt: String(rawReleasedAccountAt || '').trim(),
         reusedAfterExpiry: rawReusedAfterExpiry === true || String(rawReusedAfterExpiry).trim() === 'true',

@@ -1,6 +1,7 @@
 import { DEFAULT_ADOBE_PASSWORD, isAccountEmail, parseAdobeAccounts } from '../utils/adobeImport';
 import EmailLookup from './EmailLookup';
 import MerchantPicker from './MerchantPicker';
+import MerchantTransfer from './MerchantTransfer';
 import { accountOfferState, accountOfferReminder, toggleAccountOffer } from '../utils/accountOffers';
 import { accountEmailKey, duplicateAccountEmails, hasAccountEmail } from '../utils/duplicateAccounts';
 import { readCloudSheets, writeCloudSheet } from '../services/sheetSync';
@@ -300,6 +301,8 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
     const canDelete = user?.role === 'admin' || hasPermission('delete_row');
     const canEmptyTrash = user?.role === 'admin' || hasPermission('empty_trash');
     const canCustomize = user?.role === 'admin' || hasPermission('customize_columns');
+    const canTransferToMerchant = canAdd && canEdit && canDelete
+        && (user?.role === 'admin' || hasPermission('merchant_data') || hasPermission('sheet_merchant_data'));
 
     // Current active sheet
     const currentSheetId = activeSheetId || 'client_data';
@@ -2549,6 +2552,16 @@ export default function CustomSheets({ activeSheetId, setActiveSheetId }) {
 
                 <div className="flex flex-wrap items-center gap-2 py-3">
                     <EmailLookup sheetsList={sheetsList} />
+                    {currentSheetId === 'client_data' && canTransferToMerchant && (
+                        <MerchantTransfer sheetsList={sheetsList} onConfigSaved={setSheetsList}
+                            onTransferred={(count, name) => {
+                                loadCurrentSheetData();
+                                refreshAllCounts();
+                                setSelectedIds(new Set());
+                                setCurrentPage(1);
+                                showToast('تم نقل ' + count + ' حساب إلى التاجر ' + name, 'success');
+                            }} />
+                    )}
                     {currentSheetId === 'account_data' && activeAccountCategory === 'adobe' && canAdd && <button type="button" onClick={() => { setBulkText(''); setShowBulkModal(true); }} className="border rounded-lg px-3 py-2 text-xs font-bold"><i className="fa-solid fa-list ml-1" />إضافة إيميلات بالجملة</button>}
                     {currentSheetId === 'account_data' && <>
                         <button type='button' aria-pressed={groupFilter === 'duplicates'} onClick={() => {

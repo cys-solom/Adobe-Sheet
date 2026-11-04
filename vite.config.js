@@ -17,7 +17,7 @@ export default defineConfig({
                 assetFileNames: 'assets/[name][extname]',
                 manualChunks(id) {
                     // React core
-                    if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) {
+                    if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/') || id.includes('node_modules/scheduler/')) {
                         return 'react-core';
                     }
                     // Supabase

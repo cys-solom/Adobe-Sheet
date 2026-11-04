@@ -1,4 +1,5 @@
 import { clearSoldGroupBadge } from './accountLookup';
+import { executeMerchantTransfer } from '../utils/merchantTransfer';
 import { supabase, isConfigured } from '../lib/supabase';
 
 export const SHEETS_CHANGED = 'servicehub:sheets-changed';
@@ -31,6 +32,29 @@ export async function writeCloudSheet(sheetId, records) {
     notifySheets();
     // Broadcast only an invalidation signal, never account credentials.
     if (channel) await channel.send({ type: 'broadcast', event: 'changed', payload: {} });
+}
+
+export async function transferClientsToMerchant(request) {
+    if (!isConfigured) throw new Error('قاعدة البيانات غير متصلة');
+    try {
+        const result = await executeMerchantTransfer(request, {
+            readSheets: readCloudSheets,
+            writeSheets: async rows => {
+                status('saving');
+                const { error } = await supabase.from('custom_sheets_data').upsert(rows);
+                if (error) throw error;
+            }
+        });
+        status('saved');
+        notifySheets();
+        if (channel) {
+            try { await channel.send({ type: 'broadcast', event: 'changed', payload: {} }); } catch {}
+        }
+        return result;
+    } catch (error) {
+        status('error');
+        throw error;
+    }
 }
 
 const getAccountKey = (value) => String(value || '').trim().toLowerCase();
